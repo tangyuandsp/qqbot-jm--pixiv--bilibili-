@@ -1,0 +1,36 @@
+# token
+config.py
+# binaries
+NapCatQQ_Node/
+NapCatQQ_Node.zip
+ffmpeg.exe
+ffprobe.exe
+ffmpeg.zip
+ffmpeg/
+# temp
+temp_videos/
+__pycache__/
+*.pyc
+# debug scripts
+*.ps1
+debug_*.py
+full_sniff.py
+raw_sniff.py
+diagnose.py
+test_*.py
+list_*.py
+list_*.ps1
+check_*.py
+check_*.ps1
+# sensitive
+qrcode.png
+*.log
+# IDE
+.vscode/
+# misc
+NapCatQQ_OneKey.zip
+Ò»¼üÆô¶¯.bat
+mihomo_config.yaml
+gui.py
+gui_config.json
+

@@ -1,0 +1,20 @@
+# ============================================================
+# QQ 群聊 B站视频下载机器人 — 依赖列表
+# ============================================================
+# 安装方式: pip install -r requirements.txt
+#
+# 额外系统依赖:
+#   ffmpeg — yt-dlp 合并 DASH 音视频流时需要
+#   Windows:  choco install ffmpeg  或从 https://ffmpeg.org 下载
+#   Linux:    apt install ffmpeg / yum install ffmpeg
+# ============================================================
+
+# ── WebSocket 客户端（连接 NapCatQQ）──
+websockets>=12.0
+
+# ── HTTP 请求（B站 API、短链接重定向）──
+requests>=2.31.0
+
+# ── 漫画下载 ──
+jmcomic>=2.7.0
+img2pdf>=0.5.0
