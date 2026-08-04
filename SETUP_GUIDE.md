@@ -110,7 +110,7 @@ qq-bili-bot/
 ```python
 NAPCAT_WS_URL = "ws://localhost:3001"
 TEMP_DIR = r"E:\BiliBot_TempVideos"    # E盘独立暂存目录
-ALLOWED_GROUPS = [606247943]            # 群白名单
+ALLOWED_GROUPS = [YOUR_GROUP_ID]            # 群白名单
 MAX_FILE_SIZE = 100 * 1024 * 1024       # 100MB
 RECONNECT_DELAY = 5                      # 断线重连间隔
 ```

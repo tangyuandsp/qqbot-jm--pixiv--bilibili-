@@ -9,7 +9,7 @@ import subprocess
 import time
 import sys
 
-SERVER = "root@115.29.233.209"
+SERVER = "root@YOUR_SERVER_IP"  # TODO: 替换为你的服务器地址
 REMOTE_PORT = 10091
 LOCAL_PORT = 10090
 

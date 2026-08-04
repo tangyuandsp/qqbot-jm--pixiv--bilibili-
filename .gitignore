@@ -34,3 +34,15 @@ mihomo_config.yaml
 gui.py
 gui_config.json
 
+# proxy / sensitive artifacts
+*.deb
+*.b64
+xray_linux
+sing-box_ph
+add_socks.py
+add_mixed_inbound.py
+hy2_mihomo.yaml
+mihomo_ph.yaml
+mihomo-hy2.service
+pixiv_handler_fixed.py
+pixiv_handler_v2.py
