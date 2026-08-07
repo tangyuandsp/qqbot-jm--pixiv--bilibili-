@@ -1,0 +1,242 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>✦ BiliBot 控制台</title>
+<link rel="stylesheet" href="/static/style.css">
+<link rel="stylesheet" href="/static/vendor/sakura-petals.css">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🌸</text></svg>">
+</head>
+<body>
+  <!-- AcgUI 樱花飘落组件（纯 JS，低开销） -->
+  <acg-sakura-petals count="30" speed="1.8" color="#ff8fb8" theme="dark" opacity="0.6" z-index="1" area="fullscreen"></acg-sakura-petals>
+  <!-- 漂浮光点层 -->
+  <div id="spark-layer" aria-hidden="true"></div>
+  <!-- 二次元樱花树背景 -->
+  <div class="bg-tree" aria-hidden="true"><img src="/static/img/sakura_tree.svg" alt=""></div>
+
+  <!-- 登录遮罩 -->
+  <div id="login-overlay">
+    <div class="login-card glass">
+      <div class="login-emoji">🌸</div>
+      <h1 class="gradient-text">BiliBot 控制台</h1>
+      <p class="login-sub">输入管理令牌以继续</p>
+      <input id="login-token" type="password" placeholder="Admin Token" autocomplete="off">
+      <button id="login-btn" class="btn-primary">进入</button>
+      <p id="login-err" class="login-err"></p>
+    </div>
+  </div>
+
+  <!-- 主界面 -->
+  <div id="app" class="hidden">
+    <header class="topbar glass">
+      <div class="brand">
+        <span class="brand-icon">🌸</span>
+        <span class="brand-name gradient-text">BiliBot 控制台</span>
+      </div>
+      <div class="topbar-right">
+        <span id="bot-status-pill" class="status-pill">…</span>
+        <button id="logout-btn" class="btn-ghost" title="退出登录">退出</button>
+      </div>
+    </header>
+
+    <!-- Hero 横幅 -->
+    <section class="hero glass">
+      <div class="hero-glow hero-glow-1"></div>
+      <div class="hero-glow hero-glow-2"></div>
+      <div class="hero-glow hero-glow-3"></div>
+      <div class="hero-content">
+        <div class="hero-kicker">✦ QQ 群机器人管理面板 ✦</div>
+        <div class="hero-title">B站 · 漫画 · Pixiv · 语音</div>
+        <div class="hero-sub">一个面板管理全部功能，白名单 / 音色 / 开关都在这里</div>
+        <div class="hero-stats">
+          <span class="hero-stat"><b id="hero-bot">—</b><em>Bot 状态</em></span>
+          <span class="hero-stat"><b id="hero-cpu">—</b><em>CPU</em></span>
+          <span class="hero-stat"><b id="hero-mem">—</b><em>内存占用</em></span>
+          <span class="hero-stat"><b id="hero-ws">—</b><em>NapCat</em></span>
+        </div>
+      </div>
+    </section>
+
+    <nav class="tabs glass">
+      <button class="tab active" data-tab="overview">🏠 总览</button>
+      <button class="tab" data-tab="whitelist">🛡️ 白名单</button>
+      <button class="tab" data-tab="voices">🎙️ 音色</button>
+      <button class="tab" data-tab="features">✨ 功能</button>
+      <button class="tab" data-tab="ai">🤖 AI 人设</button>
+      <button class="tab" data-tab="logs">📜 日志</button>
+    </nav>
+
+    <main>
+      <!-- 总览 -->
+      <section id="tab-overview" class="tab-page active">
+        <div class="stat-grid" id="stat-grid">
+          <div class="stat-card glass"><div class="stat-label">Bot 服务</div><div class="stat-value" id="st-bot">—</div></div>
+          <div class="stat-card glass"><div class="stat-label">NapCat 连接</div><div class="stat-value" id="st-ws">—</div></div>
+          <div class="stat-card glass"><div class="stat-label">CPU</div><div class="stat-value" id="st-cpu">—</div></div>
+          <div class="stat-card glass"><div class="stat-label">内存</div><div class="stat-value" id="st-mem">—</div></div>
+          <div class="stat-card glass"><div class="stat-label">磁盘</div><div class="stat-value" id="st-disk">—</div></div>
+          <div class="stat-card glass"><div class="stat-label">运行时长</div><div class="stat-value" id="st-uptime">—</div></div>
+        </div>
+        <div class="card glass">
+          <div class="card-title">🖥️ 服务器操作</div>
+          <div class="row-between">
+            <span class="muted">修改白名单/限制后 Bot 会在 30 秒内自动生效；改默认音色或装新功能后需要重启。</span>
+            <button id="restart-btn" class="btn-danger">重启 Bot</button>
+          </div>
+          <div id="restart-msg" class="muted mt8"></div>
+        </div>
+        <div class="card glass">
+          <div class="card-title">✨ 已启用功能</div>
+          <div id="feature-preview" class="chip-wrap"></div>
+        </div>
+      </section>
+
+      <!-- 白名单 -->
+      <section id="tab-whitelist" class="tab-page">
+        <div class="card glass">
+          <div class="card-title">🛡️ 群白名单（仅这些群处理 B站链接）</div>
+          <div class="chip-wrap" id="wl-groups"></div>
+          <div class="add-row">
+            <input id="wl-groups-input" type="number" placeholder="输入群号回车添加">
+            <button class="btn-primary" data-add="groups">添加</button>
+          </div>
+        </div>
+        <div class="card glass">
+          <div class="card-title">👤 私聊白名单（/jm /pixiv 等私聊命令可用）</div>
+          <div class="chip-wrap" id="wl-users"></div>
+          <div class="add-row">
+            <input id="wl-users-input" type="number" placeholder="输入QQ号回车添加">
+            <button class="btn-primary" data-add="users">添加</button>
+          </div>
+        </div>
+        <div class="card glass">
+          <div class="card-title">🎙️ 语音管理员（/sayto /voice 切换）</div>
+          <div class="chip-wrap" id="wl-voice"></div>
+          <div class="add-row">
+            <input id="wl-voice-input" type="number" placeholder="输入QQ号回车添加">
+            <button class="btn-primary" data-add="voice">添加</button>
+          </div>
+        </div>
+        <div class="card glass">
+          <div class="card-title">⚙️ 限制与默认</div>
+          <div class="form-grid">
+            <label>视频最大(MB)
+              <input id="cfg-maxfile" type="number" min="1">
+            </label>
+            <label>漫画PDF最大(MB)
+              <input id="cfg-maxpdf" type="number" min="1">
+            </label>
+            <label>语音最大字数
+              <input id="cfg-voicechars" type="number" min="10" max="500">
+            </label>
+            <label>默认音色
+              <select id="cfg-defaultvoice"></select>
+            </label>
+          </div>
+        </div>
+        <div class="sticky-save">
+          <button id="save-whitelist" class="btn-primary btn-big">💾 保存白名单配置</button>
+          <span id="whitelist-hint" class="muted"></span>
+        </div>
+      </section>
+
+      <!-- 音色 -->
+      <section id="tab-voices" class="tab-page">
+        <div class="card glass">
+          <div class="card-title">🎙️ 音色参数（语速/温度/断句，保存后 30 秒内生效）</div>
+          <div id="voice-cards" class="voice-grid"></div>
+          <div class="sticky-save">
+            <button id="save-voices" class="btn-primary btn-big">💾 保存音色参数</button>
+            <span id="voices-hint" class="muted"></span>
+          </div>
+        </div>
+      </section>
+
+      <!-- 功能 -->
+      <section id="tab-features" class="tab-page">
+        <div class="card glass">
+          <div class="card-title">✨ 功能开关（保存后 30 秒内生效）</div>
+          <div id="feature-list"></div>
+          <div class="sticky-save">
+            <button id="save-features" class="btn-primary btn-big">💾 保存功能开关</button>
+            <span id="features-hint" class="muted"></span>
+          </div>
+        </div>
+      </section>
+
+      <!-- AI 人设 -->
+      <section id="tab-ai" class="tab-page">
+        <div class="card glass">
+          <div class="card-title">🤖 AI 人设（切换立即生效，无需重启）</div>
+          <div id="ai-persona-grid" class="ai-persona-grid"></div>
+          <div class="row-between mt8">
+            <span id="ai-current" class="muted">当前人设：—</span>
+            <button id="ai-off-btn" class="btn-ghost">关闭 AI 人设</button>
+          </div>
+        </div>
+        <div class="card glass">
+          <div class="card-title">💗 好感度（内容越好越涨，越差越掉）</div>
+          <div class="row-between">
+            <select id="aff-persona" class="aff-select"></select>
+            <span class="muted">规则：热情+3 友善+2 中性+1 冷淡-2 不耐烦-4 指责-6 恶意-10</span>
+          </div>
+          <div id="aff-list" class="aff-list"></div>
+          <div class="add-row mt8">
+            <input id="aff-conv" placeholder="群号 或 p+QQ（如 123456）">
+            <input id="aff-user" type="number" placeholder="QQ号">
+            <input id="aff-value" type="number" min="0" max="100" placeholder="0-100">
+            <button id="aff-set" class="btn-primary">设置</button>
+          </div>
+        </div>
+        <div class="card glass">
+          <div class="card-title">🧠 上下文长度（AI 记住的对话轮数）</div>
+          <p class="muted">记忆越多 AI 越"记得"前面的对话，但每次回复会稍慢、消耗更多 token。</p>
+          <div class="form-grid">
+            <label>上下文轮数（2~50，默认 10）
+              <input id="ai-ctx" type="number" min="2" max="50">
+            </label>
+            <label>每轮最多回复条数（1~5，默认 2）
+              <input id="ai-budget" type="number" min="1" max="5">
+            </label>
+            <label>最大排队数（1~10，默认 3）
+              <input id="ai-queue" type="number" min="1" max="10">
+            </label>
+          </div>
+          <div class="feature-item">
+            <div class="feature-icon">🎙️</div>
+            <div>
+              <div class="feature-name">语音回复</div>
+              <div class="feature-desc">开启 = AI 用对应人设语音回复；关闭 = 改为文字回复</div>
+            </div>
+            <label class="switch">
+              <input type="checkbox" id="ai-voice-reply">
+              <span class="slider"></span>
+            </label>
+          </div>
+          <div class="sticky-save">
+            <button id="save-ai" class="btn-primary btn-big">💾 保存 AI 设置</button>
+            <span id="ai-hint" class="muted"></span>
+          </div>
+        </div>
+      </section>
+
+      <!-- 日志 -->
+      <section id="tab-logs" class="tab-page">
+        <div class="card glass">
+          <div class="row-between">
+            <div class="card-title">📜 Bot 日志（自动刷新）</div>
+            <button id="log-refresh" class="btn-ghost">刷新</button>
+          </div>
+          <pre id="log-box" class="log-box"></pre>
+        </div>
+      </section>
+    </main>
+  </div>
+
+  <div id="toast" class="toast hidden"></div>
+  <script src="/static/vendor/sakura-petals.js"></script>
+  <script src="/static/app.js"></script>
+</body>
+</html>

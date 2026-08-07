@@ -1,0 +1,23 @@
+{
+  "admin_token": "please-change-me",
+  "allowed_groups": [],
+  "comic_allowed_users": [],
+  "voice_control_users": [],
+  "comic_max_pdf_size": 83886080,
+  "max_file_size": 104857600,
+  "voice_max_chars": 80,
+  "default_voice": "爱莉希雅",
+  "features": {
+    "bili": true,
+    "jm": true,
+    "pixiv": true,
+    "voice": true,
+    "ai": true
+  },
+  "voices": {},
+  "ai_persona": null,
+  "ai_context_length": 10,
+  "ai_turn_budget": 2,
+  "ai_voice_reply": true,
+  "ai_queue_max": 3
+}

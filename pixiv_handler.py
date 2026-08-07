@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 # ============================================================
 # Pixiv 插画功能模块（curl 后端，避免 Python SSL 问题）
 # ============================================================
@@ -14,7 +15,7 @@ _executor = ThreadPoolExecutor(max_workers=1)
 _img_executor = ThreadPoolExecutor(max_workers=3)  # 缩略图并行下载
 _OUT_DIR = "/opt/bilibot/temp_videos/pixiv"
 
-PROXY = "http://127.0.0.1:10091"
+PROXY = "socks5h://127.0.0.1:10808"
 TOKEN = ""
 TOKEN_FILE = "/tmp/pixiv_token.json"
 

@@ -29,7 +29,7 @@ qrcode.png
 .vscode/
 # misc
 NapCatQQ_OneKey.zip
-һ������.bat
+һ�����.bat
 mihomo_config.yaml
 gui.py
 gui_config.json
@@ -46,3 +46,9 @@ mihomo_ph.yaml
 mihomo-hy2.service
 pixiv_handler_fixed.py
 pixiv_handler_v2.py
+
+# AI / 管理面板运行时密钥与数据
+ai_secret.py
+ai_affection.json
+admin/admin_config.json
+admin/admin_config.json.tmp
