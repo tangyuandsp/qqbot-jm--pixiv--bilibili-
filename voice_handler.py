@@ -96,7 +96,15 @@ def _request_tts(text: str, name: str) -> bytes:
         headers={"Content-Type": "application/json"},
     )
     with urllib.request.urlopen(req, timeout=_tts_timeout) as resp:
-        return resp.read()
+        data = resp.read()
+    # 校验返回内容是不是合法 WAV：HTTP 200 但内容是错误 JSON / 空响应时，
+    # 直接当失败处理，让上层走文字保底，避免发出去一个坏音频
+    if not data or not data.startswith(b"RIFF"):
+        snippet = data[:80].decode("utf-8", errors="replace")
+        raise ValueError(f"TTS 返回内容不是有效音频: {snippet}")
+    if len(data) < 128:
+        raise ValueError("TTS 返回音频过短")
+    return data
 
 
 def _ensure_loaded(name: str) -> None:
@@ -117,6 +125,12 @@ async def switch_voice(name: str) -> None:
             _loaded_voice["name"] = None
             raise
         _loaded_voice["name"] = name
+
+
+def set_default_voice(name: str) -> None:
+    """设置默认音色（不加载权重），供每日自动轮换使用；手动切换请用 switch_voice"""
+    if name in VOICES:
+        _default_voice["name"] = name
 
 
 async def generate_voice(text: str, voice_name: str = None) -> str:

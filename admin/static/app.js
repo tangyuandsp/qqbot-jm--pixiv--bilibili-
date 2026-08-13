@@ -90,7 +90,7 @@ function initTabs() {
       $("tab-" + tab.dataset.tab).classList.add("active");
       if (tab.dataset.tab === "logs") refreshLogs();
       if (tab.dataset.tab === "overview") refreshStatus();
-      if (tab.dataset.tab === "ai") { loadAI(); loadAffection(); }
+      if (tab.dataset.tab === "ai") { loadAI(); loadAffection(); loadDaily(); }
     });
   });
 }
@@ -525,6 +525,59 @@ function renderAffList() {
   }
 }
 
+/* ---------- 定时情感语音 ---------- */
+async function loadDaily() {
+  try {
+    state.daily = await api("/api/daily");
+  } catch (e) {
+    toast("❌ 加载定时语音设置失败: " + e.message);
+    return;
+  }
+  $("daily-enabled").checked = state.daily.enabled;
+  renderDailyTargets();
+}
+
+function renderDailyTargets() {
+  const box = $("daily-targets");
+  box.innerHTML = "";
+  (state.daily.targets || []).forEach((t) => {
+    const row = document.createElement("div");
+    row.className = "aff-row";
+    const span = document.createElement("span");
+    span.textContent = (t.type === "private" ? "私聊 " : "群 ") + t.id;
+    const btn = document.createElement("button");
+    btn.className = "btn-ghost";
+    btn.textContent = "删除";
+    btn.onclick = async () => {
+      try {
+        await api("/api/daily", "PUT", { remove_target: { type: t.type, id: t.id } });
+        toast("✅ 已移除目标 " + t.id);
+        loadDaily();
+      } catch (e) { toast("❌ " + e.message); }
+    };
+    row.append(span, btn);
+    box.appendChild(row);
+  });
+  if (!(state.daily.targets || []).length) {
+    const empty = document.createElement("div");
+    empty.className = "muted";
+    empty.textContent = "暂无目标，用下方输入框添加（QQ号=私聊，g+群号=群）";
+    box.appendChild(empty);
+  }
+}
+
+async function saveDaily() {
+  try {
+    const r = await api("/api/daily", "PUT", { enabled: $("daily-enabled").checked });
+    state.daily = r;
+    $("daily-hint").textContent = "✅ 已保存，立即生效";
+    toast("✅ 定时语音设置已保存");
+  } catch (e) {
+    $("daily-hint").textContent = "❌ " + e.message;
+    toast("❌ 保存失败: " + e.message);
+  }
+}
+
 /* ---------- 重启 ---------- */
 async function restartBot() {
   $("restart-msg").textContent = "正在重启 Bot ...";
@@ -576,6 +629,23 @@ async function init() {
       loadAffection();
     } catch (e) { toast("❌ " + e.message); }
   });
+  $("daily-add").addEventListener("click", async () => {
+    const input = $("daily-target-input").value.trim();
+    if (!input) { toast("❌ 请输入 QQ 号或 g+群号"); return; }
+    let type = "private", id = input;
+    if (input.startsWith("g") && /^\d+$/.test(input.slice(1))) {
+      type = "group";
+      id = input.slice(1);
+    }
+    if (!/^\d+$/.test(id)) { toast("❌ 格式错误：QQ号 或 g群号"); return; }
+    try {
+      await api("/api/daily", "PUT", { add_target: { type, id: parseInt(id, 10) } });
+      toast("✅ 已添加目标");
+      $("daily-target-input").value = "";
+      loadDaily();
+    } catch (e) { toast("❌ " + e.message); }
+  });
+  $("save-daily").addEventListener("click", saveDaily);
   bindAdd("allowed_groups", "wl-groups-input", document.querySelector('[data-add="groups"]'));
   bindAdd("comic_allowed_users", "wl-users-input", document.querySelector('[data-add="users"]'));
   bindAdd("voice_control_users", "wl-voice-input", document.querySelector('[data-add="voice"]'));
@@ -586,6 +656,7 @@ async function init() {
   await refreshStatus();
   await loadAI();
   await loadAffection();
+  await loadDaily();
   renderFeaturePreview();
 
   setInterval(refreshStatus, 5000);

@@ -24,6 +24,7 @@ from pathlib import Path
 sys.path.insert(0, "/opt/bilibot")  # 复用 bot 的 config.py（纯常量模块，无副作用）
 import config as bot_config
 import ai_handler
+import daily_greeting
 
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import FileResponse
@@ -488,6 +489,51 @@ async def api_put_affection(request: Request):
             raise HTTPException(status_code=400, detail="value 必须是 0~100 的整数")
         ai_handler.set_affection(persona, conv, user, value)
     return {"ok": True}
+
+
+@app.get("/api/daily")
+def api_get_daily(request: Request):
+    check_auth(request)
+    return {
+        "enabled": daily_greeting.get_enabled(),
+        "targets": daily_greeting.get_targets(),
+        "slots": [
+            {"id": k, "time": "%d:%02d" % (h, m), "name": n}
+            for k, (h, m, n) in daily_greeting.SLOTS.items()
+        ],
+    }
+
+
+@app.put("/api/daily")
+async def api_put_daily(request: Request):
+    check_auth(request)
+    body = await request.json()
+    if not isinstance(body, dict):
+        raise HTTPException(status_code=400, detail="body must be object")
+    if "enabled" in body:
+        if not isinstance(body["enabled"], bool):
+            raise HTTPException(status_code=400, detail="enabled 必须是布尔值")
+        daily_greeting.set_enabled(body["enabled"])
+    if "add_target" in body:
+        t = body["add_target"]
+        if (not isinstance(t, dict) or t.get("type") not in ("private", "group")
+                or not isinstance(t.get("id"), int)):
+            raise HTTPException(status_code=400, detail="add_target 格式错误")
+        daily_greeting.add_target(t["type"], t["id"])
+    if "remove_target" in body:
+        t = body["remove_target"]
+        if (not isinstance(t, dict) or t.get("type") not in ("private", "group")
+                or not isinstance(t.get("id"), int)):
+            raise HTTPException(status_code=400, detail="remove_target 格式错误")
+        daily_greeting.remove_target(t["type"], t["id"])
+    return {
+        "enabled": daily_greeting.get_enabled(),
+        "targets": daily_greeting.get_targets(),
+        "slots": [
+            {"id": k, "time": "%d:%02d" % (h, m), "name": n}
+            for k, (h, m, n) in daily_greeting.SLOTS.items()
+        ],
+    }
 
 
 # ----------------------------------------------------------

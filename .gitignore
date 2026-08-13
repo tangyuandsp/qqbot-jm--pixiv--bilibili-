@@ -29,7 +29,7 @@ qrcode.png
 .vscode/
 # misc
 NapCatQQ_OneKey.zip
-һ�����.bat
+һ������.bat
 mihomo_config.yaml
 gui.py
 gui_config.json
@@ -47,8 +47,27 @@ mihomo-hy2.service
 pixiv_handler_fixed.py
 pixiv_handler_v2.py
 
-# AI / 管理面板运行时密钥与数据
-ai_secret.py
-ai_affection.json
+# voice model (large files, keep off GitHub)
+roxy_model/
+洛琪�?.zip
+
+# voice (GPT-SoVITS local env + models, keep off GitHub)
+voice/
+voice_deploy/
+洛琪�?.zip
+
+# handbook / runtime state / secrets
+PROJECT_HANDBOOK.md
+PROJECT_SUMMARY.md
+gen_summary.py
 admin/admin_config.json
-admin/admin_config.json.tmp
+voice_rotation.json
+.config_server.py
+_gen_example.py
+_scan*.py
+_locate.py
+_bot_sync.tgz
+
+# local big files
+一键启动.bat
+洛琪希GSV模型260426.zip

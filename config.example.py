@@ -1,6 +1,5 @@
 # ============================================================
-# QQ 群聊 B站视频下载机器人 — 配置模板
-# 复制为 config.py 并填入你自己的参数
+# QQ 群聊 B站视频下载机器人 — 配置文件（服务器版）
 # ============================================================
 
 # ── 正向 WebSocket：连接本机 NapCatQQ Docker 容器 ──
@@ -13,14 +12,14 @@ TEMP_DIR = "/opt/bilibot/temp_videos"
 MAX_FILE_SIZE = 100 * 1024 * 1024
 
 # 群白名单：只处理这些群的 B站链接
-ALLOWED_GROUPS = []  # 填入你的群号
+ALLOWED_GROUPS = [111111111]  # 在这里填白名单群号  # 汪汪队登duan郎 + 第二群
 
 # ── Pixiv 功能 ──
 # Pixiv refresh_token（从浏览器 Cookie 或 OAuth 获取）
 # 获取方式: https://github.com/upbit/pixivpy/issues/158
-PIXIV_REFRESH_TOKEN = "your_pixiv_refresh_token_here"
+PIXIV_REFRESH_TOKEN = "your_pixiv_refresh_token"
 # QQ 号白名单：只有这些 QQ 号的 /jm 命令才会生效
-COMIC_ALLOWED_USERS = []  # 填入允许私聊命令的 QQ
+COMIC_ALLOWED_USERS = [10001, 10002]  # 私聊白名单 QQ  # 你的大号 + 机器人号
 
 # 漫画下载临时目录（服务器上）
 COMIC_TEMP_DIR = "/opt/bilibot/temp_videos/comic"
@@ -85,13 +84,93 @@ VOICES = {
     },
     "流萤": {
         "id": "firefly",
-        "gpt_weights": "E:/qq-bili-bot/voice/models/firefly/gpt.ckpt",
-        "sovits_weights": "E:/qq-bili-bot/voice/models/firefly/sovits.pth",
-        "ref_audio": "E:/qq-bili-bot/voice/models/firefly/ref.wav",
-        "prompt_text": "我最喜欢这家店的橡木蛋糕卷，每天都要吃一个。",
+        "gpt_weights": "E:/qq-bili-bot/voice/models/firefly_v4/gpt.ckpt",
+        "sovits_weights": "E:/qq-bili-bot/voice/models/firefly_v4/sovits.pth",
+        "ref_audio": "E:/qq-bili-bot/voice/models/firefly_v4/refs/ref_happy.wav",
+        "prompt_text": "我还知道，你们经常在银河各地到处旅行。",
         "prompt_lang": "zh",
         "speed_factor": 0.85,
         "temperature": 0.7,
+    },
+    '希儿': {
+        "id": 'seele',
+        "gpt_weights": 'E:/qq-bili-bot/voice/models/希儿白/gpt.ckpt',
+        "sovits_weights": 'E:/qq-bili-bot/voice/models/希儿白/sovits.pth',
+        "ref_audio": 'E:/qq-bili-bot/voice/models/希儿白/refs/三/我吗？可是布罗尼亚姐姐和提安娜相处更久，了解更多吧。.wav',
+        "prompt_text": '我吗？可是布罗尼亚姐姐和提安娜相处更久，了解更多吧。',
+        "prompt_lang": "zh",
+        "speed_factor": 0.9,
+        "temperature": 0.7,
+    },
+    '布洛妮娅': {
+        "id": 'bronya',
+        "gpt_weights": 'E:/qq-bili-bot/voice/models/布洛妮娅/gpt.ckpt',
+        "sovits_weights": 'E:/qq-bili-bot/voice/models/布洛妮娅/sovits.pth',
+        "ref_audio": 'E:/qq-bili-bot/voice/models/布洛妮娅/refs/那当然了，即使在千羽学院的废墟，芽衣也并没有真的做错什么。.wav',
+        "prompt_text": '那当然了，即使在千羽学院的废墟，芽衣也并没有真的做错什么。',
+        "prompt_lang": "zh",
+        "speed_factor": 0.9,
+        "temperature": 0.7,
+    },
+    '花火': {
+        "id": 'huahuo',
+        "gpt_weights": 'E:/qq-bili-bot/voice/models/花火_dj/gpt.ckpt',
+        "sovits_weights": 'E:/qq-bili-bot/voice/models/花火_dj/sovits.pth',
+        "ref_audio": 'E:/qq-bili-bot/voice/models/花火_dj/refs/花火参考音频-真是个冷血的家伙，嘿，我们说不定很聊得来哦。.wav',
+        "prompt_text": '真是个冷血的家伙，嘿，我们说不定很聊得来哦。',
+        "prompt_lang": "zh",
+        "speed_factor": 0.92,
+        "temperature": 0.82,
+    },
+    '风堇': {
+        "id": 'fengjin',
+        "gpt_weights": 'E:/qq-bili-bot/voice/models/风堇/gpt_v3.ckpt',
+        "sovits_weights": 'E:/qq-bili-bot/voice/models/风堇/sovits_v2.pth',
+        "ref_audio": 'E:/qq-bili-bot/voice/models/风堇/refs/不辛苦！伤员们都很配合治疗，能让大家健健康康回家去，我就心满意足啦。.wav',
+        "prompt_text": '不辛苦！伤员们都很配合治疗，能让大家健健康康回家去，我就心满意足啦。',
+        "prompt_lang": "zh",
+        "speed_factor": 0.85,
+        "temperature": 0.7,
+    },
+    '胡桃': {
+        "id": 'hutao',
+        "gpt_weights": 'E:/qq-bili-bot/voice/models/胡桃/gpt.ckpt',
+        "sovits_weights": 'E:/qq-bili-bot/voice/models/胡桃/sovits.pth',
+        "ref_audio": 'E:/qq-bili-bot/voice/models/胡桃/ref.wav',
+        "prompt_text": '本堂主略施小计，你就败下阵来了，嘿嘿。',
+        "prompt_lang": "zh",
+        "speed_factor": 1.05,
+        "temperature": 1.0,
+    },
+    '刻晴': {
+        "id": 'keqing',
+        "gpt_weights": 'E:/qq-bili-bot/voice/models/刻晴/gpt.ckpt',
+        "sovits_weights": 'E:/qq-bili-bot/voice/models/刻晴/sovits.pth',
+        "ref_audio": 'E:/qq-bili-bot/voice/models/刻晴/ref.wav',
+        "prompt_text": '这「七圣召唤」虽说是游戏，但对局之中也隐隐有策算谋略之理。',
+        "prompt_lang": "zh",
+        "speed_factor": 1.0,
+        "temperature": 0.8,
+    },
+    '甘雨': {
+        "id": 'ganyu',
+        "gpt_weights": 'E:/qq-bili-bot/voice/models/甘雨/gpt.ckpt',
+        "sovits_weights": 'E:/qq-bili-bot/voice/models/甘雨/sovits.pth',
+        "ref_audio": 'E:/qq-bili-bot/voice/models/甘雨/ref.wav',
+        "prompt_text": '但只要最后落在具体的「人」身上，那，我可以想办法。',
+        "prompt_lang": "zh",
+        "speed_factor": 0.85,
+        "temperature": 0.7,
+    },
+    '三月七': {
+        "id": 'march7',
+        "gpt_weights": 'E:/qq-bili-bot/voice/models/三月七/gpt.ckpt',
+        "sovits_weights": 'E:/qq-bili-bot/voice/models/三月七/sovits.pth',
+        "ref_audio": 'E:/qq-bili-bot/voice/models/三月七/ref.wav',
+        "prompt_text": '名字是我自己取的，大家也叫我三月、小三月…你呢？你想叫我什么？',
+        "prompt_lang": "zh",
+        "speed_factor": 0.82,
+        "temperature": 0.82,
     },
 }
 VOICE_NAMES = list(VOICES.keys())
@@ -101,7 +180,7 @@ VOICE_SAY_DIR = "/opt/bilibot/temp_videos/say"
 VOICE_MAX_CHARS = 80
 
 # /sayto 指定发送语音的管理员白名单（只有这些 QQ 能用）
-VOICE_CONTROL_USERS = []  # 填入管理员 QQ
+VOICE_CONTROL_USERS = [10001, 10002]  # 语音管理员 QQ
 
 # 日志
 LOG_FORMAT = "%(asctime)s [%(levelname)s] %(name)s: %(message)s"

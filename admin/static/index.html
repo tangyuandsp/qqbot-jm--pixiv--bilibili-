@@ -191,6 +191,29 @@
           </div>
         </div>
         <div class="card glass">
+          <div class="card-title">🌅 定时情感语音（9:00 晨间鼓励 / 18:30 下班宽慰 / 23:30 睡前安抚）</div>
+          <div class="feature-item">
+            <div class="feature-icon">🌅</div>
+            <div>
+              <div class="feature-name">定时情感语音</div>
+              <div class="feature-desc">每天按时给指定的人/群发送温柔长文语音（用当前人设音色）</div>
+            </div>
+            <label class="switch">
+              <input type="checkbox" id="daily-enabled">
+              <span class="slider"></span>
+            </label>
+          </div>
+          <div id="daily-targets" class="aff-list"></div>
+          <div class="add-row mt8">
+            <input id="daily-target-input" placeholder="QQ号 或 g群号（如 123456 或 g123456）">
+            <button id="daily-add" class="btn-primary">添加目标</button>
+          </div>
+          <div class="sticky-save">
+            <button id="save-daily" class="btn-primary btn-big">💾 保存定时语音设置</button>
+            <span id="daily-hint" class="muted"></span>
+          </div>
+        </div>
+        <div class="card glass">
           <div class="card-title">🧠 上下文长度（AI 记住的对话轮数）</div>
           <p class="muted">记忆越多 AI 越"记得"前面的对话，但每次回复会稍慢、消耗更多 token。</p>
           <div class="form-grid">
