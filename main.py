@@ -46,6 +46,7 @@ from video_info import get_video_info
 import vision_handler
 import image_handler
 import qwen_image_handler
+import local_draw_handler
 
 # ----------------------------------------------------------
 # 日志
@@ -217,8 +218,11 @@ async def _do_draw(ws, target_id: int, prompt: str, ref_image_url: str | None,
     await reply_fn("🎨 正在生成图片，请稍候~")
     loop = asyncio.get_running_loop()
     path = None
-    # 提示词含「千问」→ 走千问模块；否则走 Seedream 链
-    if "千问" in prompt:
+    # 路由：含「本地」→ 本地SD（无审核）；含「千问」→ 千问；否则 Seedream 链
+    if "本地" in prompt:
+        gen_prompt = prompt.replace("本地", "").strip() or prompt
+        gen_fn = local_draw_handler.generate_image
+    elif "千问" in prompt:
         gen_prompt = prompt.replace("千问", "").strip() or prompt
         gen_fn = qwen_image_handler.generate_image
     else:

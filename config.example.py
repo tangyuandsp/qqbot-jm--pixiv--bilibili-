@@ -71,6 +71,11 @@ QWEN_MODEL = "qwen-image-3.0-pro"
 QWEN_API_URL = "https://dashscope.aliyuncs.com/api/v1/services/aigc/multimodal-generation/generation"
 QWEN_TEMP_DIR = "/opt/bilibot/temp_videos/qwen"
 
+# ── AI 绘图（本地 Stable Diffusion：提示词含「本地」时使用）──
+LOCAL_SD_URL = "http://127.0.0.1:17860"
+LOCAL_SD_CHECKPOINT = "hassakuHentaiModel_hassakuv1m.safetensors"
+LOCAL_DRAW_TEMP_DIR = "/opt/bilibot/temp_videos/local_draw"
+
 # ── 语音功能（GPT-SoVITS 多音色，经反向隧道连接本机）──
 # 本地电脑运行 voice/voice_daemon.py，隧道把服务器 9881 转发到本机 9880
 TTS_URL = "http://127.0.0.1:9881/tts"
