@@ -44,9 +44,9 @@ from downloader import download_video
 from link_parser import extract_bv_from_message
 from video_info import get_video_info
 import vision_handler
-  import image_handler
-  import qwen_image_handler
-  import se_color_handler
+import image_handler
+import qwen_image_handler
+import se_color_handler
 
 # ----------------------------------------------------------
 # 日志
@@ -962,8 +962,15 @@ async def handle_group_message(ws, event: dict) -> None:
                 img_url = await _find_reply_image(ws, reply_id)
                 if img_url:
                     question = _plain_text(event) or clean
-                    # 引用图片：提问（什么/谁/介绍…）→ 图片理解；改图指令 → 图生图
-                    if feature_enabled("vision") and _looks_like_image_question(question):
+                    # 引用图片：「涩涩」强制走图生图；提问（什么/谁/介绍…）→ 图片理解；
+                    # 其他改图指令 → 图生图
+                    if "涩涩" in question:
+                        asyncio.create_task(
+                            _do_draw(ws, group_id, question, img_url,
+                                     lambda m: send_group_message(ws, group_id, m),
+                                     lambda path, cap: send_group_image(ws, group_id, path, cap))
+                        )
+                    elif feature_enabled("vision") and _looks_like_image_question(question):
                         asyncio.create_task(
                             _vision_ai_dispatch(ws, group_id, question, img_url, True,
                                                 event.get("user_id"),
@@ -1233,8 +1240,15 @@ async def handle_private_message(ws, event: dict) -> None:
                 clean_msg = _plain_text(event) or re.sub(
                     r"\[CQ:[^\]]*\]", "", msg
                 ).strip()
-                # 引用图片：提问（什么/谁/介绍…）→ 图片理解；改图指令 → 图生图
-                if feature_enabled("vision") and _looks_like_image_question(clean_msg):
+                # 引用图片：「涩涩」强制走图生图；提问（什么/谁/介绍…）→ 图片理解；
+                # 其他改图指令 → 图生图
+                if "涩涩" in clean_msg:
+                    asyncio.create_task(
+                        _do_draw(ws, user_id, clean_msg, img_url,
+                                 lambda m: send_private_message(ws, user_id, m),
+                                 lambda path, cap: send_private_image(ws, user_id, path, cap))
+                    )
+                elif feature_enabled("vision") and _looks_like_image_question(clean_msg):
                     asyncio.create_task(
                         _vision_ai_dispatch(ws, user_id, clean_msg, img_url, False, user_id,
                                             lambda m: send_private_message(ws, user_id, m))
