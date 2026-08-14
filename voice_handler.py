@@ -79,7 +79,7 @@ def _request_tts(text: str, name: str) -> bytes:
     text = text.replace("\u30fb", " ")
     req = {
         "text": text,
-        "text_lang": "zh",
+        "text_lang": voice["prompt_lang"],
         "ref_audio_path": voice["ref_audio"],
         "prompt_text": voice["prompt_text"],
         "prompt_lang": voice["prompt_lang"],
