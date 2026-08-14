@@ -55,11 +55,11 @@ ARK_API_KEY = "your_ark_api_key"
 ARK_BASE_URL = "https://ark.cn-beijing.volces.com/api/v3"
 # 模型链：优先 4.5（200 张免费额度），额度用尽/限流/报错自动换下一个
 SEEDREAM_MODELS = [
-    {"id": "doubao-seedream-4-5-251128", "size": "2048x2048", "label": "Seedream 4.5"},
-    {"id": "doubao-seedream-5-0-lite-260128", "size": "2048x2048", "label": "Seedream 5.0-Lite"},
-    {"id": "doubao-seedream-4-0-250828", "size": "1024x1024", "label": "Seedream 4.0"},
-    {"id": "doubao-seedream-5-0-260128", "size": "2048x2048", "label": "Seedream 5.0"},
-    {"id": "doubao-seedream-5-0-pro-260628", "size": "2048x2048", "label": "Seedream 5.0-Pro"},
+    {"id": "doubao-seedream-4-5-251128", "size": "2048x2048", "min_px": 3686400, "max_px": 16777216, "label": "Seedream 4.5"},
+    {"id": "doubao-seedream-5-0-lite-260128", "size": "2048x2048", "min_px": 3686400, "max_px": 16777216, "label": "Seedream 5.0-Lite"},
+    {"id": "doubao-seedream-4-0-250828", "size": "1024x1024", "min_px": 921600, "max_px": 16777216, "label": "Seedream 4.0"},
+    {"id": "doubao-seedream-5-0-260128", "size": "2048x2048", "min_px": 3686400, "max_px": 16777216, "label": "Seedream 5.0"},
+    {"id": "doubao-seedream-5-0-pro-260628", "size": "2048x2048", "min_px": 921600, "max_px": 4624220, "label": "Seedream 5.0-Pro"},
 ]
 # 生成图片临时目录（发送后即删）
 DRAW_TEMP_DIR = "/opt/bilibot/temp_videos/draw"
