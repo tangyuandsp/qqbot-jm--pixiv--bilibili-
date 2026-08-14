@@ -200,6 +200,16 @@ async def _vision_ai_dispatch(ws, target_id: int, question: str, img_url: str,
 _draw_semaphore = asyncio.Semaphore(2)  # 最多同时生成 2 张，避免接口被打爆
 
 
+async def _delayed_remove(path: str, delay: float = 120.0) -> None:
+    """延迟删除临时文件：NapCat 异步读文件，不能发完立刻删，否则报 ENOENT。"""
+    await asyncio.sleep(delay)
+    try:
+        os.remove(path)
+        logger.info(f"🧹 已清理绘图临时文件: {os.path.basename(path)}")
+    except Exception:
+        pass
+
+
 async def _do_draw(ws, target_id: int, prompt: str, ref_image_url: str | None,
                    reply_fn, send_image_fn) -> None:
     """文生图 / 图生图统一入口：生成 → 回传 → 清理临时文件。"""
@@ -232,12 +242,9 @@ async def _do_draw(ws, target_id: int, prompt: str, ref_image_url: str | None,
             else:
                 await reply_fn("😣 图片生成失败，可能是额度用完或描述有问题，稍后再试吧~")
         finally:
-            # 无论成败都清理临时文件，防止磁盘打满
+            # 无论成败都延迟清理临时文件（NapCat 需要时间读文件，勿立即删）
             if path:
-                try:
-                    await loop.run_in_executor(None, os.remove, path)
-                except Exception:
-                    pass
+                asyncio.get_running_loop().create_task(_delayed_remove(path))
 
 
 # ----------------------------------------------------------
