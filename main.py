@@ -371,6 +371,12 @@ def _apply_daily_voice(voice: str) -> None:
         logger.warning(f"🎙️ 每日音色持久化失败: {exc}")
     config.DEFAULT_VOICE = voice
     voice_handler.set_default_voice(voice)
+    # 同步当前 AI 人设（人设名=音色名），让 AI 日常对话音色跟随每日轮换
+    try:
+        if voice in ai_handler.list_personas():
+            ai_handler.set_current_persona(voice)
+    except Exception as exc:
+        logger.warning(f"🎙️ 每日人设同步失败: {exc}")
     logger.info(f"🎙️ 每日音色轮换 → {voice}")
 
 
@@ -1121,7 +1127,7 @@ async def send_pixiv_forward(ws, target_id: int, items: list[dict], title: str, 
 
     # 构建转发节点：摘要 + 每个插图一个节点
     messages = [
-        {"type": "node", "data": {"name": "PixivBot", "uin": "10001",
+        {"type": "node", "data": {"name": "PixivBot", "uin": "3421767135",
          "content": "\n".join(summary_lines)}}
     ]
 
@@ -1134,7 +1140,7 @@ async def send_pixiv_forward(ws, target_id: int, items: list[dict], title: str, 
             ]
         else:
             content = f"[{item['id']}] {item['title'][:30]}\n✏️{item['author']}"
-        messages.append({"type": "node", "data": {"name": "PixivBot", "uin": "10001", "content": content}})
+        messages.append({"type": "node", "data": {"name": "PixivBot", "uin": "3421767135", "content": content}})
 
     action = "send_group_forward_msg" if is_group else "send_private_forward_msg"
     target_key = "group_id" if is_group else "user_id"
