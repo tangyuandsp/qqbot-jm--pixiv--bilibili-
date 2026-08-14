@@ -20,10 +20,53 @@ import urllib.error
 from PIL import Image
 
 import config
+from ai_secret import DEEPSEEK_API_KEY
 
 logger = logging.getLogger("BiliBot")
 
-MAX_SIDE = 768  # SD1.5 在 6GB 显存上的安全出图边长
+MAX_SIDE = config.LOCAL_SD_MAX_SIDE
+
+# DeepSeek 转译 SD 标签的提示词
+_SD_TAG_SYSTEM = (
+    "你是 Stable Diffusion 提示词翻译助手。把用户的图片修改指令转换成 "
+    "SD 可理解的英文标签（逗号分隔），只输出标签本身，不要任何解释、不要加引号、不要加码。"
+    "例：把头发染成粉色 → pink hair；换成泳装 → swimsuit, bikini；"
+    "去掉衣服 → nude, no clothes, topless；背景改成夜景 → night scene background, city lights。"
+    "若指令含比例（16:9、竖版、方形）忽略，只转内容。"
+)
+
+
+def _translate_to_sd_tags(instruction: str) -> str:
+    """用 DeepSeek 把中文改图指令转成 SD 英文标签；失败则原样返回。"""
+    if not instruction.strip():
+        return instruction
+    body = {
+        "model": "deepseek-chat",
+        "messages": [
+            {"role": "system", "content": _SD_TAG_SYSTEM},
+            {"role": "user", "content": instruction},
+        ],
+        "max_tokens": 120,
+        "temperature": 0.3,
+    }
+    try:
+        req = urllib.request.Request(
+            "https://api.deepseek.com/chat/completions",
+            data=json.dumps(body).encode("utf-8"),
+            headers={
+                "Content-Type": "application/json",
+                "Authorization": "Bearer " + DEEPSEEK_API_KEY,
+            },
+            method="POST",
+        )
+        with urllib.request.urlopen(req, timeout=30) as resp:
+            data = json.loads(resp.read().decode("utf-8"))
+        tags = data["choices"][0]["message"]["content"].strip()
+        logger.info("🖥️ 本地SD指令转译: %r -> %r", instruction, tags)
+        return tags
+    except Exception as exc:
+        logger.warning("🖥️ SD 指令转译失败: %s", exc)
+        return instruction
 
 
 def _ensure_tmp() -> None:
@@ -91,16 +134,17 @@ def generate_image(prompt: str, ref_image_bytes: bytes | None = None):
     _ensure_tmp()
     init_b64, width, height = _prep_init(ref_image_bytes)
     checkpoint = _pick_checkpoint()
+    tags = _translate_to_sd_tags(prompt)
 
     body = {
         "init_images": [f"data:image/jpeg;base64,{init_b64}"],
-        "prompt": f"{prompt}, masterpiece, best quality, highly detailed, anime",
+        "prompt": f"{tags}, masterpiece, best quality, highly detailed, anime",
         "negative_prompt": "EasyNegativeV2, lowres, bad anatomy, bad hands, worst quality, low quality, watermark",
         "steps": 25,
         "cfg_scale": 7.0,
         "width": width,
         "height": height,
-        "denoising_strength": 0.68,
+        "denoising_strength": 0.72,
         "sampler_name": "DPM++ 2M Karras",
         "seed": -1,
     }
