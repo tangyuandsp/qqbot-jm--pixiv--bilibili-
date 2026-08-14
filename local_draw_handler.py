@@ -108,6 +108,19 @@ def _pick_checkpoint() -> str:
         return config.LOCAL_SD_CHECKPOINT or ""
 
 
+def _controlnet_model() -> str | None:
+    """查 Forge 里已注册的 ControlNet Canny 模型名；没有则返回 None。"""
+    try:
+        resp = _sd_api("/controlnet/model_list", timeout=20)
+        names = resp.get("model_list") or []
+        for n in names:
+            if "canny" in n.lower() and n != "None":
+                return n
+    except Exception as exc:
+        logger.warning("🖥️ 获取 ControlNet 模型列表失败: %s", exc)
+    return None
+
+
 def _prep_init(img_bytes: bytes):
     """缩放参考图到安全尺寸，返回 (base64, width, height)。"""
     img = Image.open(io.BytesIO(img_bytes))
@@ -135,6 +148,7 @@ def generate_image(prompt: str, ref_image_bytes: bytes | None = None):
     init_b64, width, height = _prep_init(ref_image_bytes)
     checkpoint = _pick_checkpoint()
     tags = _translate_to_sd_tags(prompt)
+    cn_model = _controlnet_model()
 
     body = {
         "init_images": [f"data:image/jpeg;base64,{init_b64}"],
@@ -144,12 +158,29 @@ def generate_image(prompt: str, ref_image_bytes: bytes | None = None):
         "cfg_scale": 7.0,
         "width": width,
         "height": height,
-        "denoising_strength": 0.72,
+        # ControlNet 锁构图后降噪可低一些：既能换装/换背景，又不会把人物整个换掉
+        "denoising_strength": 0.62 if cn_model else 0.72,
         "sampler_name": "DPM++ 2M Karras",
         "seed": -1,
     }
     if checkpoint:
         body["override_settings"] = {"sd_model_checkpoint": checkpoint}
+    if cn_model:
+        body["alwayson_scripts"] = {
+            "controlnet": {
+                "args": [
+                    {
+                        "input_image": f"data:image/jpeg;base64,{init_b64}",
+                        "module": "canny",
+                        "model": cn_model,
+                        "weight": 0.75,
+                        "resize_mode": "Crop and Resize",
+                        "guidance_start": 0.0,
+                        "guidance_end": 0.9,
+                    }
+                ]
+            }
+        }
 
     resp = _sd_api("/sdapi/v1/img2img", body, timeout=300)
     images = resp.get("images") or []
