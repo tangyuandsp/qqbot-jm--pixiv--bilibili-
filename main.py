@@ -44,9 +44,9 @@ from downloader import download_video
 from link_parser import extract_bv_from_message
 from video_info import get_video_info
 import vision_handler
-import image_handler
-import qwen_image_handler
-import local_draw_handler
+  import image_handler
+  import qwen_image_handler
+  import se_color_handler
 
 # ----------------------------------------------------------
 # 日志
@@ -215,13 +215,14 @@ async def _delayed_remove(path: str, delay: float = 120.0) -> None:
 async def _do_draw(ws, target_id: int, prompt: str, ref_image_url: str | None,
                    reply_fn, send_image_fn) -> None:
     """文生图 / 图生图统一入口：生成 → 回传 → 清理临时文件。"""
+    prompt = re.sub(r"\[CQ:[^\]]*\]", "", prompt or "").strip()
     await reply_fn("🎨 正在生成图片，请稍候~")
     loop = asyncio.get_running_loop()
     path = None
-    # 路由：含「本地」→ 本地SD（无审核）；含「千问」→ 千问；否则 Seedream 链
-    if "本地" in prompt:
-        gen_prompt = prompt.replace("本地", "").strip() or prompt
-        gen_fn = local_draw_handler.generate_image
+    # 路由：含「涩涩」→ 魔搭Qwen-Edit（无审核）；含「千问」→ 千问；否则 Seedream 链
+    if "涩涩" in prompt:
+        gen_prompt = prompt.replace("涩涩", "").strip() or prompt
+        gen_fn = se_color_handler.generate_image
     elif "千问" in prompt:
         gen_prompt = prompt.replace("千问", "").strip() or prompt
         gen_fn = qwen_image_handler.generate_image
@@ -1228,15 +1229,19 @@ async def handle_private_message(ws, event: dict) -> None:
             img_url = await _find_reply_image(ws, reply_id)
             logger.info(f"🔎 私聊引用图: reply_id={reply_id}, 命中={bool(img_url)}")
             if img_url:
+                # 引用图片场景：消息里带 [CQ:reply,...] 前缀，先取纯文本再判断
+                clean_msg = _plain_text(event) or re.sub(
+                    r"\[CQ:[^\]]*\]", "", msg
+                ).strip()
                 # 引用图片：提问（什么/谁/介绍…）→ 图片理解；改图指令 → 图生图
-                if feature_enabled("vision") and _looks_like_image_question(msg):
+                if feature_enabled("vision") and _looks_like_image_question(clean_msg):
                     asyncio.create_task(
-                        _vision_ai_dispatch(ws, user_id, msg, img_url, False, user_id,
+                        _vision_ai_dispatch(ws, user_id, clean_msg, img_url, False, user_id,
                                             lambda m: send_private_message(ws, user_id, m))
                     )
                 elif feature_enabled("draw"):
                     asyncio.create_task(
-                        _do_draw(ws, user_id, msg, img_url,
+                        _do_draw(ws, user_id, clean_msg, img_url,
                                  lambda m: send_private_message(ws, user_id, m),
                                  lambda path, cap: send_private_image(ws, user_id, path, cap))
                     )
