@@ -927,23 +927,6 @@ async def handle_group_message(ws, event: dict) -> None:
                                 lambda m: send_group_message(ws, group_id, m))
                 return
 
-    # ── 图生图：引用图片 + 直接要求（无需 /draw、无需 @机器人） ──
-    if feature_enabled("draw"):
-        reply_id = _extract_reply_id(event)
-        if reply_id:
-            cached = _image_cache.get(reply_id)
-            if cached and cached["urls"]:
-                text = _plain_text(event)
-                if text and not _looks_like_image_question(text):
-                    # 别抢 B站链接/其他命令（那些在上面已处理，这里再兜底一次）
-                    if not extract_bv_from_message(text):
-                        asyncio.create_task(
-                            _do_draw(ws, group_id, text, cached["urls"][0],
-                                     lambda m: send_group_message(ws, group_id, m),
-                                     lambda path, cap: send_group_image(ws, group_id, path, cap))
-                        )
-                        return
-
     if not feature_enabled("bili"):
         return
 
