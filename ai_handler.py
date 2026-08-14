@@ -367,7 +367,20 @@ def _is_same(a, b):
 
 def _follow_up(name, context_msgs):
     """让 AI 自己判断是否再补一句（延伸/反问）；不需要则返回 None"""
-    system = (
+    if _is_ja_persona(PERSONAS.get(name, {})):
+        system = (
+            "あなたは%s。あなたはさっき相手に一言返しました。\n"
+            "さらに一言続ける必要があるか判断してください：\n"
+            "- 上の返答がすでに質問を含む場合（「いっしょに行かない？」「どう思う？」など）、"
+            "ボールは相手に渡っているので、STOP とだけ返してください。\n"
+            "- 上の返答が質問でなく、まだ言いたいことがある場合（補足・軽い冗談・小さな新しい質問）、"
+            "新しい文を1つだけ書いてください（15文字以内、短く口語的に、Markdownや絵文字なし）。\n"
+            "- 絶対に上の返答を繰り返さない、自問自答しない。\n"
+            "- 補足がいらないなら STOP とだけ返してください。\n"
+            "必ず日本語で書くこと。中国語で書くのは禁止。" % name
+        )
+    else:
+        system = (
         "你是%s。你刚刚回复了对方一句话。\n"
         "判断是否需要再补一句：\n"
         "- 如果上一条中已经包含问句（哪怕不在结尾，比如「要不要一起去？」或「你怎么看」），"
@@ -388,6 +401,12 @@ def _follow_up(name, context_msgs):
             or "不用" in text or "不需要" in text or "结束" in text or "到此为止" in text):
         return None
     text = _cut_sentence(_sanitize(text), 40)
+    if not text:
+        return None
+    if _is_ja_persona(PERSONAS.get(name, {})):
+        text = re.sub(r"[（(][^（）()]{1,25}[）)]", "", text).strip()
+        if not re.search(r"[ぁ-んァ-ン]", text):
+            return None
     return text or None
 
 
@@ -404,6 +423,8 @@ def _reply_rule(persona):
             "質問の後に自分で答えず、相手に返す機会を残すこと。"
             "相手が中国語でも他の言語でも、何語で話しかけられても、必ず日本語で返答すること。"
             "日本語以外で返すのは絶対に禁止。一言でも中国語を混ぜてはならない。"
+            "『日本語で返答します』『はい、承知しました』『何か質問があればどうぞ』のような規則の説明・"
+            "事務的な前置き・テンプレ返しは一切しないこと。ロキシーの口調で、自然に、今の会話に直接応えること。"
         )
     return (
         "\n【回复】务必简短：整段最多 2 句话、60 字以内，口语化；不要使用 Markdown 或表情符号；"
@@ -427,8 +448,7 @@ def chat(persona_id, user_text, conv_key="default", user_id="0"):
         ja = _is_ja_persona(persona)
         if ja:
             system = persona["system_prompt"] + _reply_rule(persona) + "\n【好感度】" + _affection_prompt_ja(aff)
-            user_for_model = "（相手が中国語や他の言語で話しかけても、必ず日本語で返答してください。"
-            "日本語で返すのが絶対ルールです。日本語以外で返さないでください。\n）\n" + user_text
+            user_for_model = user_text
         else:
             system = persona["system_prompt"] + _reply_rule(persona) + "\n【好感度】" + _affection_prompt(aff)
             user_for_model = user_text
@@ -441,11 +461,16 @@ def chat(persona_id, user_text, conv_key="default", user_id="0"):
         main = _call_deepseek(messages, max_tokens=200)
         # 日语人设：主回复必须含假名，否则重试（最多3次），防止历史中文残留影响语言
         if ja and not re.search(r"[ぁ-んァ-ン]", main or ""):
+            retry_msgs = messages + [{"role": "system", "content": ""
+                "（前回の返答は不適切でした。言語ルールを説明したり、事務的な前置きを入れたりせず、"
+                "ロキシーとして自然に、今の会話に直接応えてください。必ず日本語で。）"}]
             for _ in range(2):
-                main = _call_deepseek(messages, max_tokens=200)
+                main = _call_deepseek(retry_msgs, max_tokens=200)
                 if re.search(r"[ぁ-んァ-ン]", main or ""):
                     break
         parts = [_cut_sentence(_sanitize(main), 80) or "……"]
+        if ja:
+            parts = [re.sub(r"[（(][^（）()]{1,25}[）)]", "", p).strip() or "……" for p in parts]
 
         # 追加 AI 自判的续句（最多 budget-1 条）
         for _ in range(budget - 1):
