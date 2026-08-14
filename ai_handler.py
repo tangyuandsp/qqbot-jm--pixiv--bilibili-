@@ -125,6 +125,24 @@ def _affection_prompt(value):
             "但依然保持简短。" % value)
 
 
+def _affection_prompt_ja(value):
+    """好感度语气指令（日语人设用）"""
+    if value < 20:
+        return ("相手からの好感度はとても低い（%d）。あなたは彼/彼女に冷たく距離を置き、"
+                "言葉少なで、拒絶するような口調。通常は半文から一文だけ。" % value)
+    if value < 40:
+        return ("相手からの好感度はやや低い（%d）。あなたはやや冷たく控えめで、"
+                "返事は短く、熱意はない。" % value)
+    if value < 60:
+        return ("相手からの好感度は普通（%d）。あなたは丁寧に普通に接し、"
+                "気軽な友人のように自然に話す。" % value)
+    if value < 80:
+        return ("相手からの好感度は高い（%d）。あなたはより親しみやすく、積極的に気遣い、"
+                "親しい口調——それでも短く。" % value)
+    return ("相手からの好感度はとても高い（%d）。あなたは非常に親しく、甘えたり好きだと伝えたりする"
+            "——それでも短く。" % value)
+
+
 def _classify_sentiment(user_text):
     """用 DeepSeek 快速给用户消息的情绪打分（1~7），失败默认 3（中性）"""
     system = (
@@ -373,6 +391,26 @@ def _follow_up(name, context_msgs):
     return text or None
 
 
+def _is_ja_persona(persona):
+    """人设是否强制日语回复"""
+    return persona.get("reply_lang") == "ja" or "日本語" in persona.get("system_prompt", "")
+
+
+def _reply_rule(persona):
+    """按人设语言返回回复规则（日语人设强制日语）"""
+    if _is_ja_persona(persona):
+        return (
+            "\n【返答ルール（絶対ルール）】毎回1〜2文だけ、60文字以内、口語的に。Markdownや絵文字は使わない。"
+            "質問の後に自分で答えず、相手に返す機会を残すこと。"
+            "相手が中国語でも他の言語でも、何語で話しかけられても、必ず日本語で返答すること。"
+            "日本語以外で返すのは絶対に禁止。一言でも中国語を混ぜてはならない。"
+        )
+    return (
+        "\n【回复】务必简短：整段最多 2 句话、60 字以内，口语化；不要使用 Markdown 或表情符号；"
+        "不要在问句之后立刻自己作答，把回答的机会留给对方。"
+    )
+
+
 def chat(persona_id, user_text, conv_key="default", user_id="0"):
     """同步调用 DeepSeek，返回清洗后的消息列表（每轮 1~budget 条）"""
     # 同一会话（人设+渠道）的请求串行处理，避免上下文错乱
@@ -386,16 +424,20 @@ def chat(persona_id, user_text, conv_key="default", user_id="0"):
             return []  # 好感度为 0：不回复
         ctx = get_context_length()
         budget = get_turn_budget()
-        system = persona["system_prompt"] + (
-            "\n【回复】务必简短：整段最多 2 句话、60 字以内，口语化；不要使用 Markdown 或表情符号；"
-            "不要在问句之后立刻自己作答，把回答的机会留给对方。"
-            "\n【好感度】" + _affection_prompt(aff)
-        )
+        ja = _is_ja_persona(persona)
+        if ja:
+            system = persona["system_prompt"] + _reply_rule(persona) + "\n【好感度】" + _affection_prompt_ja(aff)
+            user_for_model = "（相手が中国語や他の言語で話しかけても、必ず日本語で返答してください。"
+            "日本語で返すのが絶対ルールです。日本語以外で返さないでください。\n）\n" + user_text
+        else:
+            system = persona["system_prompt"] + _reply_rule(persona) + "\n【好感度】" + _affection_prompt(aff)
+            user_for_model = user_text
         with _history_lock:
             hist = _history.setdefault(key, [])
             hist.append({"role": "user", "content": user_text})
             history_msgs = hist[-ctx:]
-        messages = [{"role": "system", "content": system}] + history_msgs
+        messages = [{"role": "system", "content": system}] + history_msgs[:-1] \
+            + [{"role": "user", "content": user_for_model}]
         main = _call_deepseek(messages, max_tokens=200)
         parts = [_cut_sentence(_sanitize(main), 80) or "……"]
 

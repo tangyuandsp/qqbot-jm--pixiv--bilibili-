@@ -74,6 +74,9 @@ def _do_switch_weights(name: str) -> None:
 def _request_tts(text: str, name: str) -> bytes:
     """同步请求本地 TTS，返回 wav 字节"""
     voice = VOICES[name]
+    # Windows 下 GPT-SoVITS 对部分日文符号（如 U+30FB 中点）存在 GBK 编码 bug，
+    # 合成前统一替换为安全字符，避免 400；对中文/日文输出都无损
+    text = text.replace("\u30fb", " ")
     req = {
         "text": text,
         "text_lang": "zh",

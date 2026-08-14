@@ -15,6 +15,7 @@
 import datetime
 import json
 import os
+import re
 import urllib.parse
 import urllib.request
 
@@ -222,7 +223,99 @@ SLOT_INSTRUCTIONS = {
 }
 
 
+JA_SLOT_INSTRUCTIONS = {
+    "morning": (
+        "【シチュエーション：朝の励まし】親友が朝露のほとりでそっと肩を叩き、"
+        "新しい一日に優しい希望を注ぐように。温かく元気な口調だが、"
+        "熱血や決め台詞は絶対にしない。"
+    ),
+    "evening": (
+        "【シチュエーション：仕事終わりのねぎらい】親友が夕暮れに一緒にゆっくり歩いて帰るように、"
+        "一日の疲れをねぎらう。柔らかくリラックスした寄り添いの口調で、"
+        "今日の大変さを認めつつも重くしない。"
+    ),
+    "night": (
+        "【シチュエーション：寝る前のなだめ】親友が深夜の窓辺でささやくように、"
+        "安心して一日のことを手放させる。穏やかで温かく、羽のように軽い口調で、"
+        "最後に自然に「おやすみ」と添える。"
+    ),
+}
+
+
+def _ja_season(month):
+    if month in (3, 4, 5):
+        return "春の気配"
+    if month in (6, 7, 8):
+        return "真夏の頃"
+    if month in (9, 10, 11):
+        return "秋の気配"
+    return "冬の静けさ"
+
+
+def _ja_solar_term(month, day):
+    cur = (month, day)
+    prev = None
+    for m, d, name in SOLAR_TERMS:
+        if (m, d) <= cur:
+            prev = name
+    return prev or SOLAR_TERMS[-1][2]
+
+
+_JA_MOON = {
+    "新月": "新月", "娥眉月": "三日月", "上弦月": "上弦の月", "盈凸月": "盈凸の月",
+    "满月": "満月", "亏凸月": "虧凸の月", "下弦月": "下弦の月", "残月": "残月",
+}
+
+
+def _build_ja_system_prompt(slot, persona_id):
+    """日语宽慰文案模板（洛琪希等 reply_lang=ja 的人设用）"""
+    now = datetime.datetime.now()
+    weekdays = "月火水木金土日"
+    season = _ja_season(now.month)
+    solar = _ja_solar_term(now.month, now.day)
+    moon = _JA_MOON.get(_moon_phase(now), "月")
+    weather = _get_weather(get_weather_city())
+
+    anchor_line = "二十四節気：" + solar + "；月の満ち欠け：" + moon
+    if weather:
+        anchor_line += "；今日の天気：" + weather
+
+    recent = _recent_texts(slot)
+    avoid = ""
+    if recent:
+        avoid = (
+            "\n【絶対に避ける内容】あなたは最近、以下の内容をすでに話している。"
+            "今日はそれらのイメージ・言い回し・冒頭・感情の流れを絶対に繰り返さないこと：\n"
+            + "\n".join("- " + t for t in recent)
+            + "\n"
+        )
+
+    return (
+        "【絶対ルール】必ず日本語で書くこと。中国語や日本語以外で書くのは絶対に禁止。\n"
+        "あなたは%s。優しく繊細な話し手です。親しい友人に宛てて、短く美しい音声の独白を書いてください。\n"
+        "今日は%d月%d日（%s）、%s。\n"
+        "【今日のイメージ】%s\n"
+        "【要求】\n"
+        "1. %s\n"
+        "2. 今日の日付・季節・【今日のイメージ】から一つだけをそっと織り込むこと"
+        "（全てを並べない、毎日同じものを挙げない）。星座には一切触れないこと。\n"
+        "3. 親友が何気なくかけるような優しさで：気遣いを声に出さず、具体的な小さな出来事に隠す。"
+        "花や虫、朝の光、夕風、茶の香り、星や月、街角の店、窓辺の緑など、暮らしのイメージを軽く出し、"
+        "最後は相手のことにそっと話を戻す。\n"
+        "4. 優しく、口語的で、映像が浮かぶように。文と文の間に少し呼吸を。\n"
+        "5. 全体を2〜4文、120文字以内に。Markdownや絵文字は使わない。作文やスピーチにしない。\n"
+        "6. 必ず日本語で書くこと。一年は365日、あなたには無数の言い方がある——今日だけの言葉にすること。"
+        "%s"
+        % (persona_id, now.month, now.day, weekdays[now.weekday()], season, anchor_line,
+           JA_SLOT_INSTRUCTIONS[slot], avoid)
+    )
+
+
 def _build_system_prompt(slot, persona_id):
+    """生成一段语音独白文本（失败返回 None）"""
+    # 日语人设（如洛琪希）：宽慰文案也用日语生成
+    if ai_handler.PERSONAS.get(persona_id, {}).get("reply_lang") == "ja":
+        return _build_ja_system_prompt(slot, persona_id)
     now = datetime.datetime.now()
     weekdays = "一二三四五六日"
     season = _season(now.month)
@@ -269,15 +362,23 @@ def _build_system_prompt(slot, persona_id):
 def generate_message(slot, persona_id):
     """生成一段语音独白文本（失败返回 None）"""
     system = _build_system_prompt(slot, persona_id)
-    try:
-        text = ai_handler.chat_raw(
-            [{"role": "system", "content": system}],
-            max_tokens=300,
-            temperature=0.9,
-        )
-    except Exception:
-        return None
-    text = ai_handler._sanitize(text)
-    if not text:
-        return None
-    return text[:MAX_TEXT]
+    messages = [{"role": "system", "content": system}]
+    is_ja = ai_handler.PERSONAS.get(persona_id, {}).get("reply_lang") == "ja"
+    if is_ja:
+        messages.append({"role": "user", "content": "（必ず日本語で書いてください。日本語以外で書くのは禁止です。）"})
+    for _attempt in range(3):
+        try:
+            text = ai_handler.chat_raw(
+                messages,
+                max_tokens=300,
+                temperature=0.9,
+            )
+        except Exception:
+            return None
+        text = ai_handler._sanitize(text)
+        if not text:
+            return None
+        # 日语人设必须输出含假名（否则视为中文，重试）；中文人设不受影响
+        if not is_ja or re.search(r"[ぁ-んァ-ン]", text):
+            return text[:MAX_TEXT]
+    return None
