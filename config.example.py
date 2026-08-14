@@ -64,6 +64,13 @@ SEEDREAM_MODELS = [
 # 生成图片临时目录（发送后即删）
 DRAW_TEMP_DIR = "/opt/bilibot/temp_videos/draw"
 
+# ── AI 绘图（千问 qwen-image：提示词含「千问」时走此模块）──
+# 获取 key: https://dashscope.console.aliyun.com/
+QWEN_API_KEY = "your_dashscope_api_key"
+QWEN_MODEL = "qwen-image-3.0-pro"
+QWEN_API_URL = "https://dashscope.aliyuncs.com/api/v1/services/aigc/multimodal-generation/generation"
+QWEN_TEMP_DIR = "/opt/bilibot/temp_videos/qwen"
+
 # ── 语音功能（GPT-SoVITS 多音色，经反向隧道连接本机）──
 # 本地电脑运行 voice/voice_daemon.py，隧道把服务器 9881 转发到本机 9880
 TTS_URL = "http://127.0.0.1:9881/tts"

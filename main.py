@@ -45,6 +45,7 @@ from link_parser import extract_bv_from_message
 from video_info import get_video_info
 import vision_handler
 import image_handler
+import qwen_image_handler
 
 # ----------------------------------------------------------
 # 日志
@@ -216,6 +217,13 @@ async def _do_draw(ws, target_id: int, prompt: str, ref_image_url: str | None,
     await reply_fn("🎨 正在生成图片，请稍候~")
     loop = asyncio.get_running_loop()
     path = None
+    # 提示词含「千问」→ 走千问模块；否则走 Seedream 链
+    if "千问" in prompt:
+        gen_prompt = prompt.replace("千问", "").strip() or prompt
+        gen_fn = qwen_image_handler.generate_image
+    else:
+        gen_prompt = prompt
+        gen_fn = image_handler.generate_image
 
     # 图生图：先下载引用图字节
     ref_bytes = None
@@ -230,7 +238,7 @@ async def _do_draw(ws, target_id: int, prompt: str, ref_image_url: str | None,
     async with _draw_semaphore:
         try:
             path, model_label = await loop.run_in_executor(
-                None, image_handler.generate_image, prompt, ref_bytes
+                None, gen_fn, gen_prompt, ref_bytes
             )
             await send_image_fn(path, f"🎨 {model_label}")
             logger.info("🎨 绘图发送成功 [%s] 目标=%s", model_label, target_id)
