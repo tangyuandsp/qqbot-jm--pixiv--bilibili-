@@ -69,6 +69,49 @@ def feature_enabled(name: str) -> bool:
 _image_cache = {}  # message_id -> {"urls": [...], "time": float}
 _IMAGE_CACHE_MAX = 200   # 最多缓存多少条图片消息
 _IMAGE_CACHE_TTL = 2 * 3600  # 图片 URL 有效期约 2 小时，过期丢弃
+# OneBot API 请求/响应（echo 机制）：用于 get_msg 补查引用图片
+_pending_api = {}
+_api_seq = 0
+
+
+async def call_onebot_api(ws, action: str, params: dict, timeout: float = 8.0):
+    """通过同一个 WebSocket 调用 OneBot API 并等待响应。"""
+    global _api_seq
+    _api_seq += 1
+    echo = f"api_{_api_seq}"
+    fut = asyncio.get_running_loop().create_future()
+    _pending_api[echo] = fut
+    try:
+        await ws.send(json.dumps({"action": action, "params": params, "echo": echo}))
+        return await asyncio.wait_for(fut, timeout)
+    finally:
+        _pending_api.pop(echo, None)
+
+
+async def _find_reply_image(ws, reply_id: int) -> str | None:
+    """找引用消息里的图片 URL：先查缓存；没命中则调 get_msg 补查并回填缓存。"""
+    if reply_id:
+        cached = _image_cache.get(reply_id)
+        if cached and cached["urls"]:
+            return cached["urls"][0]
+    if not reply_id:
+        return None
+    try:
+        resp = await call_onebot_api(ws, "get_msg", {"message_id": reply_id})
+        data = resp.get("data") or {}
+        urls = []
+        for seg in data.get("message", []):
+            if seg.get("type") == "image":
+                url = seg.get("data", {}).get("url", "")
+                if url:
+                    urls.append(url)
+        if urls:
+            _image_cache[reply_id] = {"urls": urls, "time": time.time()}
+            logger.info(f"🔎 get_msg 补查引用图成功 msg_id={reply_id}")
+            return urls[0]
+    except Exception as exc:
+        logger.warning(f"🔎 get_msg 获取引用图失败: {exc}")
+    return None
 
 
 def _record_images(event: dict) -> None:
@@ -86,6 +129,7 @@ def _record_images(event: dict) -> None:
         return
     now = time.time()
     _image_cache[mid] = {"urls": urls, "time": now}
+    logger.info(f"📷 缓存图片 msg_id={mid} urls={len(urls)}")
     # 超时清理 + 超容量淘汰最旧
     expired = [k for k, v in _image_cache.items() if now - v["time"] > _IMAGE_CACHE_TTL]
     for k in expired:
@@ -739,13 +783,9 @@ async def handle_group_message(ws, event: dict) -> None:
                 "用法：\n/draw <描述> 文生图\n引用图片消息 + /draw <修改要求> 图生图",
             )
             return
-        # 图生图：找被引用消息里的图片
-        ref_image_url = None
+        # 图生图：找被引用消息里的图片（缓存优先，miss 则 get_msg 补查）
         reply_id = _extract_reply_id(event)
-        if reply_id:
-            cached = _image_cache.get(reply_id)
-            if cached and cached["urls"]:
-                ref_image_url = cached["urls"][0]
+        ref_image_url = await _find_reply_image(ws, reply_id)
         asyncio.create_task(
             _do_draw(
                 ws, group_id, prompt, ref_image_url,
@@ -899,11 +939,7 @@ async def handle_group_message(ws, event: dict) -> None:
             clean = re.sub(r"\[CQ:at[^\]]*\]", "", raw_message).strip()
             if clean:
                 reply_id = _extract_reply_id(event)
-                img_url = None
-                if reply_id:
-                    cached = _image_cache.get(reply_id)
-                    if cached and cached["urls"]:
-                        img_url = cached["urls"][0]
+                img_url = await _find_reply_image(ws, reply_id)
                 if img_url:
                     question = _plain_text(event) or clean
                     # 引用图片：提问（什么/谁/介绍…）→ 图片理解；改图指令 → 图生图
@@ -1023,12 +1059,8 @@ async def handle_private_message(ws, event: dict) -> None:
                 "用法：\n/draw <描述> 文生图\n引用图片消息 + /draw <修改要求> 图生图",
             )
             return
-        ref_image_url = None
         reply_id = _extract_reply_id(event)
-        if reply_id:
-            cached = _image_cache.get(reply_id)
-            if cached and cached["urls"]:
-                ref_image_url = cached["urls"][0]
+        ref_image_url = await _find_reply_image(ws, reply_id)
         asyncio.create_task(
             _do_draw(
                 ws, user_id, prompt, ref_image_url,
@@ -1174,11 +1206,8 @@ async def handle_private_message(ws, event: dict) -> None:
     if feature_enabled("ai"):
         if msg:
             reply_id = _extract_reply_id(event)
-            img_url = None
-            if reply_id:
-                cached = _image_cache.get(reply_id)
-                if cached and cached["urls"]:
-                    img_url = cached["urls"][0]
+            img_url = await _find_reply_image(ws, reply_id)
+            logger.info(f"🔎 私聊引用图: reply_id={reply_id}, 命中={bool(img_url)}")
             if img_url:
                 # 引用图片：提问（什么/谁/介绍…）→ 图片理解；改图指令 → 图生图
                 if feature_enabled("vision") and _looks_like_image_question(msg):
@@ -1522,6 +1551,13 @@ async def listen():
                         try:
                             event = json.loads(raw_message)
                         except json.JSONDecodeError:
+                            continue
+
+                        # OneBot API 响应（echo 回填等待中的请求）
+                        echo = event.get("echo")
+                        if echo and echo in _pending_api:
+                            if not _pending_api[echo].done():
+                                _pending_api[echo].set_result(event)
                             continue
 
                         if event.get("post_type") == "message" and event.get("message_type") == "group":
