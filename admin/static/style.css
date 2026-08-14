@@ -665,3 +665,19 @@ details.v-adv[open] summary { margin-bottom: 8px; }
   .brand-name { font-size: 18px; }
   .stat-value { font-size: 18px; }
 }
+
+/* ---------- AI 绘图使用说明 ---------- */
+.usage-item {
+  margin: 6px 0;
+  font-size: 13px;
+  line-height: 1.7;
+  color: #d6c8e8;
+}
+.usage-item code {
+  background: rgba(255, 143, 184, 0.12);
+  border: 1px solid rgba(255, 143, 184, 0.3);
+  border-radius: 6px;
+  padding: 1px 6px;
+  color: #ffb1cf;
+  font-size: 12px;
+}

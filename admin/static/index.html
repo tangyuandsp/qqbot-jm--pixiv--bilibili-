@@ -48,8 +48,8 @@
       <div class="hero-glow hero-glow-3"></div>
       <div class="hero-content">
         <div class="hero-kicker">✦ QQ 群机器人管理面板 ✦</div>
-        <div class="hero-title">B站 · 漫画 · Pixiv · 语音</div>
-        <div class="hero-sub">一个面板管理全部功能，白名单 / 音色 / 开关都在这里</div>
+        <div class="hero-title">B站 · 漫画 · Pixiv · 语音 · AI绘图</div>
+        <div class="hero-sub">白名单 / 音色 / 功能开关 / AI 人设，一个面板全搞定（含 AI 绘图 / 图片理解）</div>
         <div class="hero-stats">
           <span class="hero-stat"><b id="hero-bot">—</b><em>Bot 状态</em></span>
           <span class="hero-stat"><b id="hero-cpu">—</b><em>CPU</em></span>
@@ -96,7 +96,7 @@
       <!-- 白名单 -->
       <section id="tab-whitelist" class="tab-page">
         <div class="card glass">
-          <div class="card-title">🛡️ 群白名单（仅这些群处理 B站链接）</div>
+          <div class="card-title">🛡️ 群白名单（B站链接 / 图片理解 / 图生图等群内功能）</div>
           <div class="chip-wrap" id="wl-groups"></div>
           <div class="add-row">
             <input id="wl-groups-input" type="number" placeholder="输入群号回车添加">
@@ -104,7 +104,7 @@
           </div>
         </div>
         <div class="card glass">
-          <div class="card-title">👤 私聊白名单（/jm /pixiv 等私聊命令可用）</div>
+          <div class="card-title">👤 私聊白名单（/jm /pixiv /draw 及 AI 对话可用）</div>
           <div class="chip-wrap" id="wl-users"></div>
           <div class="add-row">
             <input id="wl-users-input" type="number" placeholder="输入QQ号回车添加">
@@ -164,6 +164,15 @@
             <span id="features-hint" class="muted"></span>
           </div>
         </div>
+        <div class="card glass">
+          <div class="card-title">🎨 AI 绘图 & 图片理解 使用说明</div>
+          <div class="usage-item">🖼️ 文生图：<code>/draw 一只猫在樱花树下</code></div>
+          <div class="usage-item">✏️ 图生图：引用图片消息 + 直接发要求（群聊需 @机器人），如「把头发染成粉色」</div>
+          <div class="usage-item">💠 千问引擎：引用图片 + 描述含「千问」，如「千问把背景改成夜景」</div>
+          <div class="usage-item">🔍 高清化：引用图片 + 「高清化」→ 输出 2K 高清版</div>
+          <div class="usage-item">👀 图片理解：引用图片 + 提问（这是啥/谁/出自哪），AI 看图回答</div>
+          <div class="usage-item">📐 比例：默认保持原图比例；提示词可指定 16:9 / 1920x1080 / 方形 / 横版 / 竖版</div>
+        </div>
       </section>
 
       <!-- AI 人设 -->
@@ -184,7 +193,7 @@
           </div>
           <div id="aff-list" class="aff-list"></div>
           <div class="add-row mt8">
-            <input id="aff-conv" placeholder="群号 或 p+QQ（如 123456）">
+            <input id="aff-conv" placeholder="群号 或 p+QQ（如 606247943）">
             <input id="aff-user" type="number" placeholder="QQ号">
             <input id="aff-value" type="number" min="0" max="100" placeholder="0-100">
             <button id="aff-set" class="btn-primary">设置</button>
@@ -205,7 +214,7 @@
           </div>
           <div id="daily-targets" class="aff-list"></div>
           <div class="add-row mt8">
-            <input id="daily-target-input" placeholder="QQ号 或 g群号（如 123456 或 g123456）">
+            <input id="daily-target-input" placeholder="QQ号 或 g群号（如 123456 或 g606247943）">
             <button id="daily-add" class="btn-primary">添加目标</button>
           </div>
           <div class="sticky-save">
