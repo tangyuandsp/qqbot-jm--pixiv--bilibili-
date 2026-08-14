@@ -13,6 +13,7 @@ import os
 import random
 import re
 import sys
+import time
 
 import websockets
 
@@ -42,6 +43,7 @@ import voice_rotation
 from downloader import download_video
 from link_parser import extract_bv_from_message
 from video_info import get_video_info
+import vision_handler
 
 # ----------------------------------------------------------
 # 日志
@@ -58,6 +60,76 @@ logger = logging.getLogger("BiliBot")
 def feature_enabled(name: str) -> bool:
     """功能开关（从 admin_config.json 热加载，默认全开）"""
     return config.FEATURES.get(name, True)
+
+
+# ----------------------------------------------------------
+# 图片理解（自然对话：引用图片消息提问时，bot 看图后用人设回答）
+# ----------------------------------------------------------
+_image_cache = {}  # message_id -> {"urls": [...], "time": float}
+_IMAGE_CACHE_MAX = 200   # 最多缓存多少条图片消息
+_IMAGE_CACHE_TTL = 2 * 3600  # 图片 URL 有效期约 2 小时，过期丢弃
+
+
+def _record_images(event: dict) -> None:
+    """把消息里的图片 URL 缓存起来（按 message_id），供后续引用查找。"""
+    mid = event.get("message_id")
+    if not mid:
+        return
+    urls = []
+    for seg in event.get("message", []):
+        if seg.get("type") == "image":
+            url = seg.get("data", {}).get("url", "")
+            if url:
+                urls.append(url)
+    if not urls:
+        return
+    now = time.time()
+    _image_cache[mid] = {"urls": urls, "time": now}
+    # 超时清理 + 超容量淘汰最旧
+    expired = [k for k, v in _image_cache.items() if now - v["time"] > _IMAGE_CACHE_TTL]
+    for k in expired:
+        _image_cache.pop(k, None)
+    if len(_image_cache) > _IMAGE_CACHE_MAX:
+        for k in sorted(_image_cache, key=lambda x: _image_cache[x]["time"])[
+            : len(_image_cache) - _IMAGE_CACHE_MAX
+        ]:
+            _image_cache.pop(k, None)
+
+
+def _extract_reply_id(event: dict):
+    """提取消息里的引用（reply）段指向的 message_id。"""
+    for seg in event.get("message", []):
+        if seg.get("type") == "reply":
+            try:
+                return int(seg.get("data", {}).get("id", ""))
+            except (TypeError, ValueError):
+                return None
+    return None
+
+
+def _plain_text(event: dict) -> str:
+    """只取文本段（去掉 reply/image/at 等 CQ 段），作为提问内容。"""
+    return "".join(
+        seg.get("data", {}).get("text", "")
+        for seg in event.get("message", [])
+        if seg.get("type") == "text"
+    ).strip()
+
+
+async def _vision_ai_dispatch(ws, target_id: int, question: str, img_url: str,
+                              is_group: bool, user_id: int, reply_fn) -> None:
+    """图片理解 + AI 自然回复：先把图转成描述，再连同提问交给 AI 人设回答。"""
+    loop = asyncio.get_running_loop()
+    vision = await loop.run_in_executor(
+        None, vision_handler.understand_image, img_url, question
+    )
+    if vision:
+        enhanced = f"【图片内容】{vision}\n用户问：{question}"
+    else:
+        enhanced = f"（用户发来一张图片，但图片解析失败，我看不到内容）\n用户问：{question}"
+    ahead = await ai_enqueue(ws, target_id, enhanced, None, is_group, user_id)
+    if ahead < 0:
+        await reply_fn("🤖 消息太多啦，等我说完这一波再找我吧~")
 
 
 # ----------------------------------------------------------
@@ -544,6 +616,9 @@ async def handle_group_message(ws, event: dict) -> None:
     if group_id not in config.ALLOWED_GROUPS:
         return
 
+    # 缓存本群消息里的图片，供后续「引用图片提问」使用
+    _record_images(event)
+
     raw_message = event.get("raw_message", "")
     if not raw_message:
         raw_message = "".join(
@@ -715,8 +790,23 @@ async def handle_group_message(ws, event: dict) -> None:
         if at_me:
             clean = re.sub(r"\[CQ:at[^\]]*\]", "", raw_message).strip()
             if clean:
-                ai_dispatch(ws, group_id, clean, None, True, event.get("user_id"),
-                            lambda m: send_group_message(ws, group_id, m))
+                # 引用图片消息提问 → 先看图，再结合人设自然回答
+                reply_id = _extract_reply_id(event)
+                img_url = None
+                if reply_id and feature_enabled("vision"):
+                    cached = _image_cache.get(reply_id)
+                    if cached and cached["urls"]:
+                        img_url = cached["urls"][0]
+                if img_url:
+                    question = _plain_text(event) or clean
+                    asyncio.create_task(
+                        _vision_ai_dispatch(ws, group_id, question, img_url, True,
+                                            event.get("user_id"),
+                                            lambda m: send_group_message(ws, group_id, m))
+                    )
+                else:
+                    ai_dispatch(ws, group_id, clean, None, True, event.get("user_id"),
+                                lambda m: send_group_message(ws, group_id, m))
                 return
 
     if not feature_enabled("bili"):
@@ -780,6 +870,9 @@ async def handle_private_message(ws, event: dict) -> None:
 
     if user_id not in config.COMIC_ALLOWED_USERS:
         return
+
+    # 缓存私聊里的图片，供后续「引用图片提问」使用
+    _record_images(event)
 
     msg = raw_message.strip()
     if msg == "/help":
@@ -935,8 +1028,21 @@ async def handle_private_message(ws, event: dict) -> None:
     # ── AI 被动回复：私聊白名单用户直接对话 ──
     if feature_enabled("ai"):
         if msg:
-            ai_dispatch(ws, user_id, msg, None, False, user_id,
-                        lambda m: send_private_message(ws, user_id, m))
+            # 引用图片消息提问 → 先看图，再结合人设自然回答
+            reply_id = _extract_reply_id(event)
+            img_url = None
+            if reply_id and feature_enabled("vision"):
+                cached = _image_cache.get(reply_id)
+                if cached and cached["urls"]:
+                    img_url = cached["urls"][0]
+            if img_url:
+                asyncio.create_task(
+                    _vision_ai_dispatch(ws, user_id, msg, img_url, False, user_id,
+                                        lambda m: send_private_message(ws, user_id, m))
+                )
+            else:
+                ai_dispatch(ws, user_id, msg, None, False, user_id,
+                            lambda m: send_private_message(ws, user_id, m))
             return
 
 

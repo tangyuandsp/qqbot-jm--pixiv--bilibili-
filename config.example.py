@@ -42,6 +42,13 @@ BILIBILI_HEADERS = {
 # 重连间隔（秒）
 RECONNECT_DELAY = 5
 
+# ── 图片理解（自然对话：引用图片消息提问时看图回答）──
+# 智谱开放平台 key（图片理解用免费模型 GLM-4V-Flash）
+# 获取: https://open.bigmodel.cn/
+ZHIPU_API_KEY = "your_zhipu_api_key"
+# 图片理解模型：免费稳定用 glm-4v-flash；glm-4.6v-flash 免费但高峰限流严重
+ZHIPU_VISION_MODEL = "glm-4v-flash"
+
 # ── 语音功能（GPT-SoVITS 多音色，经反向隧道连接本机）──
 # 本地电脑运行 voice/voice_daemon.py，隧道把服务器 9881 转发到本机 9880
 TTS_URL = "http://127.0.0.1:9881/tts"
@@ -200,6 +207,7 @@ FEATURES = {
     "pixiv": True,
     "voice": True,
     "ai": True,
+    "vision": True,
 }
 
 
