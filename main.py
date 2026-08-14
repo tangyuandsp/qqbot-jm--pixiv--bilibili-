@@ -117,6 +117,23 @@ def _plain_text(event: dict) -> str:
     ).strip()
 
 
+# 引用图片时的「提问」判断词：命中则视为图片理解（看图回答），否则视为图生图指令
+_IMAGE_QUESTION_HINTS = (
+    "什么", "啥", "谁", "哪个", "哪些", "怎么", "咋", "如何", "为什么", "干嘛",
+    "介绍", "描述", "讲讲", "讲一下", "说一下", "说说", "看看", "分析", "评价",
+    "认识", "知道", "出自", "出处", "来源", "哪部", "作品", "动漫", "角色", "人物",
+    "图里", "图上", "图是", "里面", "画面", "内容", "意思", "翻译", "写了什么",
+    "有什么", "这是什么", "是啥", "谁的", "长什么样", "像谁",
+)
+
+
+def _looks_like_image_question(text: str) -> bool:
+    """判断引用图片的留言是「提问」（图片理解）还是「改图指令」（图生图）。"""
+    if not text:
+        return False
+    return any(hint in text for hint in _IMAGE_QUESTION_HINTS)
+
+
 async def _vision_ai_dispatch(ws, target_id: int, question: str, img_url: str,
                               is_group: bool, user_id: int, reply_fn) -> None:
     """图片理解 + AI 自然回复：先把图转成描述，再连同提问交给 AI 人设回答。"""
@@ -881,24 +898,51 @@ async def handle_group_message(ws, event: dict) -> None:
         if at_me:
             clean = re.sub(r"\[CQ:at[^\]]*\]", "", raw_message).strip()
             if clean:
-                # 引用图片消息提问 → 先看图，再结合人设自然回答
                 reply_id = _extract_reply_id(event)
                 img_url = None
-                if reply_id and feature_enabled("vision"):
+                if reply_id:
                     cached = _image_cache.get(reply_id)
                     if cached and cached["urls"]:
                         img_url = cached["urls"][0]
                 if img_url:
                     question = _plain_text(event) or clean
-                    asyncio.create_task(
-                        _vision_ai_dispatch(ws, group_id, question, img_url, True,
-                                            event.get("user_id"),
-                                            lambda m: send_group_message(ws, group_id, m))
-                    )
+                    # 引用图片：提问（什么/谁/介绍…）→ 图片理解；改图指令 → 图生图
+                    if feature_enabled("vision") and _looks_like_image_question(question):
+                        asyncio.create_task(
+                            _vision_ai_dispatch(ws, group_id, question, img_url, True,
+                                                event.get("user_id"),
+                                                lambda m: send_group_message(ws, group_id, m))
+                        )
+                    elif feature_enabled("draw"):
+                        asyncio.create_task(
+                            _do_draw(ws, group_id, question, img_url,
+                                     lambda m: send_group_message(ws, group_id, m),
+                                     lambda path, cap: send_group_image(ws, group_id, path, cap))
+                        )
+                    else:
+                        ai_dispatch(ws, group_id, clean, None, True, event.get("user_id"),
+                                    lambda m: send_group_message(ws, group_id, m))
                 else:
                     ai_dispatch(ws, group_id, clean, None, True, event.get("user_id"),
                                 lambda m: send_group_message(ws, group_id, m))
                 return
+
+    # ── 图生图：引用图片 + 直接要求（无需 /draw、无需 @机器人） ──
+    if feature_enabled("draw"):
+        reply_id = _extract_reply_id(event)
+        if reply_id:
+            cached = _image_cache.get(reply_id)
+            if cached and cached["urls"]:
+                text = _plain_text(event)
+                if text and not _looks_like_image_question(text):
+                    # 别抢 B站链接/其他命令（那些在上面已处理，这里再兜底一次）
+                    if not extract_bv_from_message(text):
+                        asyncio.create_task(
+                            _do_draw(ws, group_id, text, cached["urls"][0],
+                                     lambda m: send_group_message(ws, group_id, m),
+                                     lambda path, cap: send_group_image(ws, group_id, path, cap))
+                        )
+                        return
 
     if not feature_enabled("bili"):
         return
@@ -1146,18 +1190,28 @@ async def handle_private_message(ws, event: dict) -> None:
     # ── AI 被动回复：私聊白名单用户直接对话 ──
     if feature_enabled("ai"):
         if msg:
-            # 引用图片消息提问 → 先看图，再结合人设自然回答
             reply_id = _extract_reply_id(event)
             img_url = None
-            if reply_id and feature_enabled("vision"):
+            if reply_id:
                 cached = _image_cache.get(reply_id)
                 if cached and cached["urls"]:
                     img_url = cached["urls"][0]
             if img_url:
-                asyncio.create_task(
-                    _vision_ai_dispatch(ws, user_id, msg, img_url, False, user_id,
-                                        lambda m: send_private_message(ws, user_id, m))
-                )
+                # 引用图片：提问（什么/谁/介绍…）→ 图片理解；改图指令 → 图生图
+                if feature_enabled("vision") and _looks_like_image_question(msg):
+                    asyncio.create_task(
+                        _vision_ai_dispatch(ws, user_id, msg, img_url, False, user_id,
+                                            lambda m: send_private_message(ws, user_id, m))
+                    )
+                elif feature_enabled("draw"):
+                    asyncio.create_task(
+                        _do_draw(ws, user_id, msg, img_url,
+                                 lambda m: send_private_message(ws, user_id, m),
+                                 lambda path, cap: send_private_image(ws, user_id, path, cap))
+                    )
+                else:
+                    ai_dispatch(ws, user_id, msg, None, False, user_id,
+                                lambda m: send_private_message(ws, user_id, m))
             else:
                 ai_dispatch(ws, user_id, msg, None, False, user_id,
                             lambda m: send_private_message(ws, user_id, m))
