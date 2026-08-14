@@ -49,6 +49,21 @@ ZHIPU_API_KEY = "your_zhipu_api_key"
 # 图片理解模型：免费稳定用 glm-4v-flash；glm-4.6v-flash 免费但高峰限流严重
 ZHIPU_VISION_MODEL = "glm-4v-flash"
 
+# ── AI 绘图（火山方舟 Seedream 文生图 / 图生图）──
+# 获取 key: https://console.volcengine.com/ark/region:cn-beijing/apiKey
+ARK_API_KEY = "your_ark_api_key"
+ARK_BASE_URL = "https://ark.cn-beijing.volces.com/api/v3"
+# 模型链：优先 4.5（200 张免费额度），额度用尽/限流/报错自动换下一个
+SEEDREAM_MODELS = [
+    {"id": "doubao-seedream-4-5-251128", "size": "2048x2048", "label": "Seedream 4.5"},
+    {"id": "doubao-seedream-5-0-lite-260128", "size": "2048x2048", "label": "Seedream 5.0-Lite"},
+    {"id": "doubao-seedream-4-0-250828", "size": "1024x1024", "label": "Seedream 4.0"},
+    {"id": "doubao-seedream-5-0-260128", "size": "2048x2048", "label": "Seedream 5.0"},
+    {"id": "doubao-seedream-5-0-pro-260628", "size": "2048x2048", "label": "Seedream 5.0-Pro"},
+]
+# 生成图片临时目录（发送后即删）
+DRAW_TEMP_DIR = "/opt/bilibot/temp_videos/draw"
+
 # ── 语音功能（GPT-SoVITS 多音色，经反向隧道连接本机）──
 # 本地电脑运行 voice/voice_daemon.py，隧道把服务器 9881 转发到本机 9880
 TTS_URL = "http://127.0.0.1:9881/tts"
@@ -208,6 +223,7 @@ FEATURES = {
     "voice": True,
     "ai": True,
     "vision": True,
+    "draw": True,
 }
 
 

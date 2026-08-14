@@ -51,6 +51,8 @@ FEATURE_META = [
      "desc": "/ai 与角色人设语音对话，/persona 切换人设"},
     {"id": "vision", "name": "图片理解", "icon": "👀",
      "desc": "引用图片消息@机器人提问，自动看图并结合人设回答"},
+    {"id": "draw", "name": "AI 绘图", "icon": "🎨",
+     "desc": "/draw 文生图；引用图片 + /draw 图生图（Seedream 4.5 优先，额度用尽自动换）"},
 ]
 
 

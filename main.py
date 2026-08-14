@@ -44,6 +44,7 @@ from downloader import download_video
 from link_parser import extract_bv_from_message
 from video_info import get_video_info
 import vision_handler
+import image_handler
 
 # ----------------------------------------------------------
 # 日志
@@ -133,6 +134,52 @@ async def _vision_ai_dispatch(ws, target_id: int, question: str, img_url: str,
 
 
 # ----------------------------------------------------------
+# AI 绘图（/draw 文生图 + 引用图片图生图，Seedream 链式兜底）
+# ----------------------------------------------------------
+_draw_semaphore = asyncio.Semaphore(2)  # 最多同时生成 2 张，避免接口被打爆
+
+
+async def _do_draw(ws, target_id: int, prompt: str, ref_image_url: str | None,
+                   reply_fn, send_image_fn) -> None:
+    """文生图 / 图生图统一入口：生成 → 回传 → 清理临时文件。"""
+    await reply_fn("🎨 正在生成图片，请稍候~")
+    loop = asyncio.get_running_loop()
+    path = None
+
+    # 图生图：先下载引用图字节
+    ref_bytes = None
+    if ref_image_url:
+        ref_bytes = await loop.run_in_executor(
+            None, image_handler.download_ref_image, ref_image_url
+        )
+        if ref_bytes is None:
+            await reply_fn("😣 拿不到你引用的那张图，重新发一次再试吧~")
+            return
+
+    async with _draw_semaphore:
+        try:
+            path, model_label = await loop.run_in_executor(
+                None, image_handler.generate_image, prompt, ref_bytes
+            )
+            await send_image_fn(path, f"🎨 {model_label}")
+            logger.info("🎨 绘图发送成功 [%s] 目标=%s", model_label, target_id)
+        except Exception as exc:
+            err_text = str(exc)
+            logger.error("🎨 绘图失败: %s", err_text)
+            if err_text.startswith("CONTENT:"):
+                await reply_fn("😣 内容可能触发了安全审核，换个描述再试吧~")
+            else:
+                await reply_fn("😣 图片生成失败，可能是额度用完或描述有问题，稍后再试吧~")
+        finally:
+            # 无论成败都清理临时文件，防止磁盘打满
+            if path:
+                try:
+                    await loop.run_in_executor(None, os.remove, path)
+                except Exception:
+                    pass
+
+
+# ----------------------------------------------------------
 # OneBot v11 API
 # ----------------------------------------------------------
 
@@ -173,6 +220,22 @@ async def send_private_voice(ws, user_id: int, filepath: str) -> None:
     """向私聊发送语音条"""
     abs_path = os.path.abspath(filepath).replace("\\", "/")
     await send_private_message(ws, user_id, f"[CQ:record,file=file://{abs_path}]")
+
+
+async def send_group_image(ws, group_id: int, filepath: str, caption: str = "") -> None:
+    """向群发送图片"""
+    abs_path = os.path.abspath(filepath).replace("\\", "/")
+    cq_image = f"[CQ:image,file=file://{abs_path}]"
+    message = f"{caption}\n{cq_image}" if caption else cq_image
+    await send_group_message(ws, group_id, message)
+
+
+async def send_private_image(ws, user_id: int, filepath: str, caption: str = "") -> None:
+    """向私聊发送图片"""
+    abs_path = os.path.abspath(filepath).replace("\\", "/")
+    cq_image = f"[CQ:image,file=file://{abs_path}]"
+    message = f"{caption}\n{cq_image}" if caption else cq_image
+    await send_private_message(ws, user_id, message)
 
 
 async def handle_comic_command(ws, group_id: int, user_id: int, comic_id: str):
@@ -646,6 +709,34 @@ async def handle_group_message(ws, event: dict) -> None:
     if raw_message.strip().startswith(("/ai ", "/persona")) and not feature_enabled("ai"):
         await send_group_message(ws, group_id, "⛔ AI 功能已由管理员停用~")
         return
+    if raw_message.strip().startswith("/draw") and not feature_enabled("draw"):
+        await send_group_message(ws, group_id, "⛔ AI 绘图功能已由管理员停用~")
+        return
+
+    # ── /draw AI 绘图（文生图 / 引用图片图生图） ──
+    if raw_message.strip().startswith("/draw"):
+        prompt = raw_message.strip()[5:].strip()
+        if not prompt:
+            await send_group_message(
+                ws, group_id,
+                "用法：\n/draw <描述> 文生图\n引用图片消息 + /draw <修改要求> 图生图",
+            )
+            return
+        # 图生图：找被引用消息里的图片
+        ref_image_url = None
+        reply_id = _extract_reply_id(event)
+        if reply_id:
+            cached = _image_cache.get(reply_id)
+            if cached and cached["urls"]:
+                ref_image_url = cached["urls"][0]
+        asyncio.create_task(
+            _do_draw(
+                ws, group_id, prompt, ref_image_url,
+                lambda m: send_group_message(ws, group_id, m),
+                lambda path, cap: send_group_image(ws, group_id, path, cap),
+            )
+        )
+        return
 
     # ── /voice 查看/切换音色 ──
     if raw_message.strip() == "/voice":
@@ -891,6 +982,33 @@ async def handle_private_message(ws, event: dict) -> None:
         return
     if msg.startswith(("/ai ", "/persona")) and not feature_enabled("ai"):
         await send_private_message(ws, user_id, "⛔ AI 功能已由管理员停用~")
+        return
+    if msg.startswith("/draw") and not feature_enabled("draw"):
+        await send_private_message(ws, user_id, "⛔ AI 绘图功能已由管理员停用~")
+        return
+
+    # ── /draw AI 绘图（文生图 / 引用图片图生图） ──
+    if msg.startswith("/draw"):
+        prompt = msg[5:].strip()
+        if not prompt:
+            await send_private_message(
+                ws, user_id,
+                "用法：\n/draw <描述> 文生图\n引用图片消息 + /draw <修改要求> 图生图",
+            )
+            return
+        ref_image_url = None
+        reply_id = _extract_reply_id(event)
+        if reply_id:
+            cached = _image_cache.get(reply_id)
+            if cached and cached["urls"]:
+                ref_image_url = cached["urls"][0]
+        asyncio.create_task(
+            _do_draw(
+                ws, user_id, prompt, ref_image_url,
+                lambda m: send_private_message(ws, user_id, m),
+                lambda path, cap: send_private_image(ws, user_id, path, cap),
+            )
+        )
         return
 
     if msg == "/voice":
