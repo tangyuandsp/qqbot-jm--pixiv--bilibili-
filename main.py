@@ -1388,7 +1388,7 @@ async def send_pixiv_forward(ws, target_id: int, items: list[dict], title: str, 
 
     # 构建转发节点：摘要 + 每个插图一个节点
     messages = [
-        {"type": "node", "data": {"name": "PixivBot", "uin": "3421767135",
+        {"type": "node", "data": {"name": "PixivBot", "uin": "10001",
          "content": "\n".join(summary_lines)}}
     ]
 
@@ -1401,7 +1401,7 @@ async def send_pixiv_forward(ws, target_id: int, items: list[dict], title: str, 
             ]
         else:
             content = f"[{item['id']}] {item['title'][:30]}\n✏️{item['author']}"
-        messages.append({"type": "node", "data": {"name": "PixivBot", "uin": "3421767135", "content": content}})
+        messages.append({"type": "node", "data": {"name": "PixivBot", "uin": "10001", "content": content}})
 
     action = "send_group_forward_msg" if is_group else "send_private_forward_msg"
     target_key = "group_id" if is_group else "user_id"
