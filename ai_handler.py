@@ -439,6 +439,12 @@ def chat(persona_id, user_text, conv_key="default", user_id="0"):
         messages = [{"role": "system", "content": system}] + history_msgs[:-1] \
             + [{"role": "user", "content": user_for_model}]
         main = _call_deepseek(messages, max_tokens=200)
+        # 日语人设：主回复必须含假名，否则重试（最多3次），防止历史中文残留影响语言
+        if ja and not re.search(r"[ぁ-んァ-ン]", main or ""):
+            for _ in range(2):
+                main = _call_deepseek(messages, max_tokens=200)
+                if re.search(r"[ぁ-んァ-ン]", main or ""):
+                    break
         parts = [_cut_sentence(_sanitize(main), 80) or "……"]
 
         # 追加 AI 自判的续句（最多 budget-1 条）
