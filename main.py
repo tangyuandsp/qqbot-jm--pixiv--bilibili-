@@ -46,6 +46,7 @@ from video_info import get_video_info
 import vision_handler
 import image_handler
 import qwen_image_handler
+import zhipu_image_handler
 import se_color_handler
 
 # ----------------------------------------------------------
@@ -212,6 +213,15 @@ async def _delayed_remove(path: str, delay: float = 120.0) -> None:
         pass
 
 
+async def _safe_draw_prompt(prompt: str) -> str:
+    """用 DeepSeek 把直白绘图提示词改写为安全化表述；失败返回原词。"""
+    loop = asyncio.get_running_loop()
+    try:
+        return await loop.run_in_executor(None, ai_handler.safe_draw_prompt, prompt)
+    except Exception:
+        return prompt
+
+
 async def _do_draw(ws, target_id: int, prompt: str, ref_image_url: str | None,
                    reply_fn, send_image_fn) -> None:
     """文生图 / 图生图统一入口：生成 → 回传 → 清理临时文件。"""
@@ -226,6 +236,9 @@ async def _do_draw(ws, target_id: int, prompt: str, ref_image_url: str | None,
     elif "千问" in prompt:
         gen_prompt = prompt.replace("千问", "").strip() or prompt
         gen_fn = qwen_image_handler.generate_image
+    elif "智谱" in prompt:
+        gen_prompt = prompt.replace("智谱", "").strip() or prompt
+        gen_fn = zhipu_image_handler.generate_image
     else:
         gen_prompt = prompt
         gen_fn = image_handler.generate_image
@@ -250,6 +263,28 @@ async def _do_draw(ws, target_id: int, prompt: str, ref_image_url: str | None,
         except Exception as exc:
             err_text = str(exc)
             logger.error("🎨 绘图失败: %s", err_text)
+            if err_text.startswith("CONTENT:") and gen_fn is image_handler.generate_image:
+                # 审核误拦：用 DeepSeek 把直白提示词安全化改写后重试（保留原意）
+                safe_prompt = await _safe_draw_prompt(gen_prompt)
+                if safe_prompt and safe_prompt != gen_prompt:
+                    await reply_fn("🎨 原提示词被安全审核拦截，已自动改写为更安全的表述重试~")
+                    try:
+                        path, model_label = await loop.run_in_executor(
+                            None, gen_fn, safe_prompt, ref_bytes
+                        )
+                        await send_image_fn(path, f"🎨 {model_label}")
+                        logger.info(
+                            "🎨 绘图发送成功（安全化改写）[%s] 目标=%s", model_label, target_id
+                        )
+                        return
+                    except Exception as exc2:
+                        err_text2 = str(exc2)
+                        logger.error("🎨 安全化改写后仍失败: %s", err_text2)
+                        if err_text2.startswith("CONTENT:"):
+                            await reply_fn("😣 安全改写后仍被审核拦截，换个图片或说法再试吧~")
+                        else:
+                            await reply_fn("😣 图片生成失败，可能是额度用完或描述有问题，稍后再试吧~")
+                        return
             if err_text.startswith("CONTENT:"):
                 await reply_fn("😣 内容可能触发了安全审核，换个描述再试吧~")
             else:
@@ -962,8 +997,7 @@ async def handle_group_message(ws, event: dict) -> None:
                 img_url = await _find_reply_image(ws, reply_id)
                 if img_url:
                     question = _plain_text(event) or clean
-                    # 引用图片：「涩涩」强制走图生图；提问（什么/谁/介绍…）→ 图片理解；
-                    # 其他改图指令 → 图生图
+                    # 引用图片：「涩涩」强制走图生图；提问（什么/谁/介绍…）→ 图片理解
                     if "涩涩" in question:
                         asyncio.create_task(
                             _do_draw(ws, group_id, question, img_url,
@@ -1240,8 +1274,7 @@ async def handle_private_message(ws, event: dict) -> None:
                 clean_msg = _plain_text(event) or re.sub(
                     r"\[CQ:[^\]]*\]", "", msg
                 ).strip()
-                # 引用图片：「涩涩」强制走图生图；提问（什么/谁/介绍…）→ 图片理解；
-                # 其他改图指令 → 图生图
+                # 引用图片：「涩涩」强制走图生图；提问（什么/谁/介绍…）→ 图片理解
                 if "涩涩" in clean_msg:
                     asyncio.create_task(
                         _do_draw(ws, user_id, clean_msg, img_url,

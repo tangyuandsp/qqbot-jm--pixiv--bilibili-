@@ -115,7 +115,7 @@ def _call_once(model_cfg: dict, prompt: str, ref_b64: str | None, size: str) -> 
 
 
 def _is_content_error(msg: str) -> bool:
-    """内容审核类报错：换模型也没用，直接终止链式重试。"""
+    """判断是否为内容审核类报错。"""
     low = (msg or "").lower()
     return (
         ("content" in low and ("filter" in low or "sensitive" in low))
@@ -124,6 +124,26 @@ def _is_content_error(msg: str) -> bool:
         or "敏感" in low
         or "违规" in low
     )
+
+
+def _sanitize_ref_image(ref_image_bytes: bytes | None) -> bytes | None:
+    """输入图无害化：重编码为 JPEG 并去掉 EXIF。
+
+    内容审核误判可能和图片编码/元数据有关，重编码后重试有机会通过；
+    原图内容不改变。失败时原样返回。
+    """
+    if not ref_image_bytes:
+        return None
+    try:
+        img = Image.open(io.BytesIO(ref_image_bytes))
+        img.load()
+        if img.mode != "RGB":
+            img = img.convert("RGB")
+        buf = io.BytesIO()
+        img.save(buf, format="JPEG", quality=90, optimize=True)
+        return buf.getvalue()
+    except Exception:
+        return ref_image_bytes
 
 
 def download_ref_image(image_url: str) -> bytes | None:
@@ -155,7 +175,17 @@ def generate_image(prompt: str, ref_image_bytes: bytes | None = None):
     """
     _ensure_tmp()
     ref_b64 = base64.b64encode(ref_image_bytes).decode("ascii") if ref_image_bytes else None
+    # 审核误拦时的备用图：无害化重编码（去 EXIF）后的版本
+    safe_b64 = None
+    if ref_image_bytes:
+        try:
+            safe_bytes = _sanitize_ref_image(ref_image_bytes)
+            if safe_bytes and safe_bytes != ref_image_bytes:
+                safe_b64 = base64.b64encode(safe_bytes).decode("ascii")
+        except Exception:
+            safe_b64 = None
     last_err = ""
+    content_blocked = False
     for cfg in config.SEEDREAM_MODELS:
         retried_content = False
         while True:
@@ -180,19 +210,28 @@ def generate_image(prompt: str, ref_image_bytes: bytes | None = None):
                     code = f"HTTP {exc.code}"
                 last_err = f"{code}: {msg[:100]}"
                 if _is_content_error(msg):
-                    # 内容审核偶发抖动：同模型重试一次；仍失败则立即终止（换模型没用）
+                    content_blocked = True
+                    # 内容审核误拦：先用无害化图重试一次；仍失败则换下一个模型
                     if not retried_content:
                         retried_content = True
-                        logger.info("🎨 [%s] 内容审核偶发拦截，重试一次", cfg["label"])
+                        if safe_b64 and safe_b64 != ref_b64:
+                            ref_b64 = safe_b64
+                            logger.info(
+                                "🎨 [%s] 内容审核拦截，用无害化图重试一次", cfg["label"]
+                            )
+                        else:
+                            logger.info("🎨 [%s] 内容审核拦截，重试一次", cfg["label"])
                         continue
                     logger.warning("🎨 模型 [%s] 内容审核: %s", cfg["label"], last_err)
-                    raise RuntimeError("CONTENT: " + last_err)
+                    break  # 换下一个模型试试（不同模型审核策略可能不同）
                 logger.warning("🎨 模型 [%s] 失败: %s", cfg["label"], last_err)
                 break  # 非内容错误，换下一个模型
             except Exception as exc:
                 last_err = str(exc)
                 logger.warning("🎨 模型 [%s] 异常: %s", cfg["label"], exc)
                 break
+    if content_blocked:
+        raise RuntimeError("CONTENT: " + last_err)
     raise RuntimeError(last_err or "图片生成失败")
 
 

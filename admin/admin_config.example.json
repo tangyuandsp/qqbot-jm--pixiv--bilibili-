@@ -19,5 +19,19 @@
   "ai_context_length": 10,
   "ai_turn_budget": 2,
   "ai_voice_reply": true,
-  "ai_queue_max": 3
+  "ai_queue_max": 3,
+  "daily_greeting": {
+    "enabled": true,
+    "targets": [
+      {
+        "type": "private",
+        "id": 0
+      },
+      {
+        "type": "group",
+        "id": 0
+      }
+    ],
+    "weather_city": "武汉"
+  }
 }

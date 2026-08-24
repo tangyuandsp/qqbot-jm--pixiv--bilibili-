@@ -173,7 +173,7 @@ def generate_image(prompt: str, ref_image_bytes: bytes | None = None):
                         "input_image": f"data:image/jpeg;base64,{init_b64}",
                         "module": "canny",
                         "model": cn_model,
-                        "weight": 0.75,
+                        "weight": 0.85,
                         "resize_mode": "Crop and Resize",
                         "guidance_start": 0.0,
                         "guidance_end": 0.9,

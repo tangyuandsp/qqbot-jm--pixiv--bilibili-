@@ -321,6 +321,34 @@ def chat_raw(messages, max_tokens=200, temperature=0.8):
     return _call_deepseek(messages, max_tokens=max_tokens, temperature=temperature)
 
 
+def safe_draw_prompt(prompt: str) -> str:
+    """把直白绘图提示词改写为保留原意的安全化表述；失败返回原词。"""
+    system = (
+        "你是专业的图片编辑提示词改写助手。用户会给出一句对图片的修改要求，"
+        "其中可能包含直白、容易触发内容审核的词（如具体身体部位、擦边、暴力等）。"
+        "请完成两件事："
+        "1) 安全化：把敏感的具体部位改为委婉说法（如'腹部区域'、'身体区域'），"
+        "去掉任何可能被判定为违规的露骨表述；"
+        "2) 扩展完善：在完全保留用户原意的前提下，把这句话扩写成一段更完整、专业的"
+        "图片编辑指令（中文，2~4句），明确要改动的区域、替换成什么，"
+        "并加上'保持图片其他部分不变、整体风格与光线自然融合、细节清晰'等质量要求。"
+        "只输出改写后的提示词本身，不要任何解释、前后缀或引号。"
+    )
+    try:
+        text = _call_deepseek(
+            [
+                {"role": "system", "content": system},
+                {"role": "user", "content": prompt},
+            ],
+            max_tokens=240,
+            temperature=0.3,
+        )
+        text = (text or "").strip().strip("\"'“”‘’")
+        return text or prompt
+    except Exception:
+        return prompt
+
+
 def _sanitize(text, limit=150):
     """去掉 markdown 符号、emoji、多余空白；保留 ~ 等语气词"""
     text = re.sub(r"[*_#`>\[\]()]", "", text)

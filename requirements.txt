@@ -18,10 +18,3 @@ requests>=2.31.0
 # ── 漫画下载 ──
 jmcomic>=2.7.0
 img2pdf>=0.5.0
-
-# ── Pixiv 插画 ──
-pixivpy>=3.7.0
-
-# ── Web 管理面板 ──
-fastapi>=0.110.0
-uvicorn>=0.29.0
