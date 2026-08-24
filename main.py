@@ -807,31 +807,34 @@ async def handle_group_message(ws, event: dict) -> None:
 
     logger.info(f"📩 群({group_id}): {raw_message[:80]}")
 
+    # 剥离 CQ 码（@机器人等）后的纯文本：斜杠命令支持 @机器人 /命令 的形式
+    cmd_text = re.sub(r"\[CQ:[^\]]*\]", "", raw_message).strip()
+
     # ── /help ──
-    if raw_message.strip() == "/help":
+    if cmd_text == "/help":
         await send_group_message(ws, group_id, HELP)
         return
 
     # ── 功能开关（管理面板可停用） ──
-    if raw_message.strip().startswith(("/voice", "/say", "/sayto")) and not feature_enabled("voice"):
+    if cmd_text.startswith(("/voice", "/say", "/sayto")) and not feature_enabled("voice"):
         await send_group_message(ws, group_id, "⛔ 语音功能已由管理员停用~")
         return
-    if raw_message.strip().startswith("/pixiv ") and not feature_enabled("pixiv"):
+    if cmd_text.startswith("/pixiv ") and not feature_enabled("pixiv"):
         await send_group_message(ws, group_id, "⛔ Pixiv 功能已由管理员停用~")
         return
-    if raw_message.strip().startswith("/jm ") and not feature_enabled("jm"):
+    if cmd_text.startswith("/jm ") and not feature_enabled("jm"):
         await send_group_message(ws, group_id, "⛔ 漫画功能已由管理员停用~")
         return
-    if raw_message.strip().startswith(("/ai ", "/persona")) and not feature_enabled("ai"):
+    if cmd_text.startswith(("/ai ", "/persona")) and not feature_enabled("ai"):
         await send_group_message(ws, group_id, "⛔ AI 功能已由管理员停用~")
         return
-    if raw_message.strip().startswith("/draw") and not feature_enabled("draw"):
+    if cmd_text.startswith("/draw") and not feature_enabled("draw"):
         await send_group_message(ws, group_id, "⛔ AI 绘图功能已由管理员停用~")
         return
 
     # ── /draw AI 绘图（文生图 / 引用图片图生图） ──
-    if raw_message.strip().startswith("/draw"):
-        prompt = raw_message.strip()[5:].strip()
+    if cmd_text.startswith("/draw"):
+        prompt = cmd_text[5:].strip()
         if not prompt:
             await send_group_message(
                 ws, group_id,
@@ -851,11 +854,11 @@ async def handle_group_message(ws, event: dict) -> None:
         return
 
     # ── /voice 查看/切换音色 ──
-    if raw_message.strip() == "/voice":
+    if cmd_text == "/voice":
         await send_group_message(ws, group_id, voice_list_text())
         return
-    if raw_message.strip().startswith("/voice "):
-        target = resolve_voice(raw_message.strip()[7:].strip())
+    if cmd_text.startswith("/voice "):
+        target = resolve_voice(cmd_text[7:].strip())
         if not target:
             await send_group_message(
                 ws, group_id, f"❓ 未知音色，可用: {' / '.join(config.VOICE_NAMES)}"
@@ -868,8 +871,8 @@ async def handle_group_message(ws, event: dict) -> None:
         return
 
     # ── /say 语音（支持「/say <音色> <文本>」指定音色） ──
-    if raw_message.strip().startswith("/say "):
-        rest = raw_message.strip()[5:].strip()
+    if cmd_text.startswith("/say "):
+        rest = cmd_text[5:].strip()
         voice_name = None
         if rest:
             first, _, remain = rest.partition(" ")
@@ -882,16 +885,16 @@ async def handle_group_message(ws, event: dict) -> None:
         return
 
     # ── /sayto 管理员指定 QQ 发送语音 ──
-    if raw_message.strip().startswith("/sayto "):
+    if cmd_text.startswith("/sayto "):
         user_id = event.get("user_id")
         asyncio.create_task(
-            handle_sayto_group(ws, group_id, user_id, raw_message.strip()[7:])
+            handle_sayto_group(ws, group_id, user_id, cmd_text[7:])
         )
         return
 
     # ── /ai AI语音对话 ──
-    if raw_message.strip().startswith("/ai "):
-        rest = raw_message.strip()[4:].strip()
+    if cmd_text.startswith("/ai "):
+        rest = cmd_text[4:].strip()
         persona = None
         if rest:
             first, _, remain = rest.partition(" ")
@@ -904,24 +907,24 @@ async def handle_group_message(ws, event: dict) -> None:
         return
 
     # ── /persona 人设列表/切换 ──
-    if raw_message.strip() == "/persona":
+    if cmd_text == "/persona":
         await send_group_message(ws, group_id, ai_persona_text())
         return
-    if raw_message.strip().startswith("/persona "):
+    if cmd_text.startswith("/persona "):
         if event.get("user_id") not in config.VOICE_CONTROL_USERS:
             await send_group_message(ws, group_id, "⛔ 只有管理员可以切换人设~")
             return
         asyncio.create_task(
-            do_switch_persona(ws, group_id, raw_message.strip()[9:].strip(), send_group_message)
+            do_switch_persona(ws, group_id, cmd_text[9:].strip(), send_group_message)
         )
         return
 
     # ── /openvoice /offvoice AI 语音回复开关（仅管理员） ──
-    if raw_message.strip() in ("/openvoice", "/offvoice"):
+    if cmd_text in ("/openvoice", "/offvoice"):
         if event.get("user_id") not in config.VOICE_CONTROL_USERS:
             await send_group_message(ws, group_id, "⛔ 只有管理员可以切换~")
             return
-        on = raw_message.strip() == "/openvoice"
+        on = cmd_text == "/openvoice"
         ai_handler.set_voice_reply(on)
         await send_group_message(
             ws, group_id,
@@ -930,23 +933,23 @@ async def handle_group_message(ws, event: dict) -> None:
         return
 
     # ── /aff 好感度 ──
-    if raw_message.strip().startswith("/aff"):
+    if cmd_text.startswith("/aff"):
         asyncio.create_task(
-            handle_aff_group(ws, group_id, event.get("user_id"), raw_message.strip())
+            handle_aff_group(ws, group_id, event.get("user_id"), cmd_text)
         )
         return
 
     # ── /daily 定时情感语音（仅管理员） ──
-    if raw_message.strip().startswith("/daily"):
+    if cmd_text.startswith("/daily"):
         asyncio.create_task(
-            handle_daily(ws, group_id, event.get("user_id"), True, raw_message.strip(),
+            handle_daily(ws, group_id, event.get("user_id"), True, cmd_text,
                          lambda m: send_group_message(ws, group_id, m))
         )
         return
 
     # ── /pixiv 插画命令 ──
-    if raw_message.strip().startswith("/pixiv "):
-        args = raw_message.strip()[7:].strip().split()
+    if cmd_text.startswith("/pixiv "):
+        args = cmd_text[7:].strip().split()
         if not args:
             return
         sub_cmd = args[0].lower()
@@ -962,9 +965,9 @@ async def handle_group_message(ws, event: dict) -> None:
         return
 
     # ── /jm 漫画命令（群聊：白名单群内所有人可用）──
-    if raw_message.strip().startswith("/jm "):
+    if cmd_text.startswith("/jm "):
         user_id = event.get("user_id")
-        args = raw_message.strip()[4:].strip().split()
+        args = cmd_text[4:].strip().split()
         if not args:
             return
         sub_cmd = args[0].lower()
