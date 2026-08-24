@@ -19,7 +19,7 @@ if hasattr(sys.stdout, "reconfigure"):
 if hasattr(sys.stderr, "reconfigure"):
     sys.stderr.reconfigure(encoding="utf-8", errors="replace")
 
-SERVER = "root@115.29.233.209"
+SERVER = "root@your-server-ip"
 REMOTE_PORT = 17860
 LOCAL_PORT = 7860
 
