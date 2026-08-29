@@ -53,6 +53,8 @@ FEATURE_META = [
      "desc": "引用图片消息@机器人提问，自动看图并结合人设回答"},
     {"id": "draw", "name": "AI 绘图", "icon": "🎨",
      "desc": "/draw 文生图；引用图片+要求即图生图；含「千问」走 qwen-image；含「涩涩」走无审核 Qwen-Edit（Seedream 4.5 优先，额度用尽自动换）"},
+    {"id": "remind", "name": "定时提醒", "icon": "⏰",
+     "desc": "群聊@我或私聊说「记得明天9点提醒我开会」→ 自动建提醒，到点前5分钟+到点提醒；/remind list 查看"},
 ]
 
 
