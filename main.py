@@ -48,6 +48,7 @@ import image_handler
 import qwen_image_handler
 import zhipu_image_handler
 import se_color_handler
+import reminder
 
 # ----------------------------------------------------------
 # 日志
@@ -815,6 +816,16 @@ async def handle_group_message(ws, event: dict) -> None:
         await send_group_message(ws, group_id, HELP)
         return
 
+    # ── /remind 提醒管理 ──
+    if cmd_text.startswith("/remind"):
+        if not feature_enabled("remind"):
+            await send_group_message(ws, group_id, "⛔ 提醒功能已由管理员停用~")
+            return
+        await reminder.handle_command(ws, cmd_text, "group", group_id,
+                                      event.get("user_id"),
+                                      lambda m: send_group_message(ws, group_id, m))
+        return
+
     # ── 功能开关（管理面板可停用） ──
     if cmd_text.startswith(("/voice", "/say", "/sayto")) and not feature_enabled("voice"):
         await send_group_message(ws, group_id, "⛔ 语音功能已由管理员停用~")
@@ -984,6 +995,22 @@ async def handle_group_message(ws, event: dict) -> None:
             asyncio.create_task(handle_comic_command(ws, group_id, user_id, sub_cmd))
         return
 
+    # ── 提醒功能：@机器人 + 提醒意图（独立于 AI 开关/人设） ──
+    if feature_enabled("remind"):
+        self_id = event.get("self_id")
+        at_me = False
+        for seg in event.get("message", []):
+            if seg.get("type") == "at":
+                qq = str(seg.get("data", {}).get("qq", ""))
+                if qq == str(self_id) or qq == "all":
+                    at_me = True
+        if at_me:
+            clean = re.sub(r"\[CQ:at[^\]]*\]", "", raw_message).strip()
+            if clean and await reminder.handle_text(ws, clean, "group", group_id,
+                                                    event.get("user_id"),
+                                                    lambda m: send_group_message(ws, group_id, m)):
+                return
+
     # ── AI 被动回复：@机器人 触发（仅白名单群） ──
     if feature_enabled("ai") and ai_handler.get_current_persona():
         self_id = event.get("self_id")
@@ -1095,6 +1122,15 @@ async def handle_private_message(ws, event: dict) -> None:
     msg = raw_message.strip()
     if msg == "/help":
         await send_private_message(ws, user_id, HELP)
+        return
+
+    # ── /remind 提醒管理 ──
+    if msg.startswith("/remind"):
+        if not feature_enabled("remind"):
+            await send_private_message(ws, user_id, "⛔ 提醒功能已由管理员停用~")
+            return
+        await reminder.handle_command(ws, msg, "private", user_id, user_id,
+                                      lambda m: send_private_message(ws, user_id, m))
         return
 
     # ── 功能开关（管理面板可停用） ──
@@ -1265,6 +1301,12 @@ async def handle_private_message(ws, event: dict) -> None:
             await send_private_message(ws, user_id, rank_text)
         elif sub_cmd.isdigit():
             await handle_comic_private(ws, user_id, sub_cmd)
+
+    # ── 提醒意图：私聊白名单用户自然语言提醒 ──
+    if feature_enabled("remind"):
+        if await reminder.handle_text(ws, msg, "private", user_id, user_id,
+                                      lambda m: send_private_message(ws, user_id, m)):
+            return
 
     # ── AI 被动回复：私聊白名单用户直接对话 ──
     if feature_enabled("ai"):
@@ -1612,12 +1654,14 @@ async def listen():
     asyncio.create_task(ai_worker())
     asyncio.create_task(daily_greeting_loop())
     asyncio.create_task(daily_voice_rotation())
+    asyncio.create_task(reminder.reminder_loop())
 
     while True:
         try:
             logger.info(f"🔌 正在连接 NapCatQQ: {NAPCAT_WS_URL}")
             async with websockets.connect(NAPCAT_WS_URL, ping_interval=20, ping_timeout=10, max_size=2**23) as ws:
                 _current_ws["ws"] = ws
+                reminder.set_ws(ws)
                 logger.info("✅ 已连接到 NapCatQQ，开始监听群消息...")
                 hb_task = asyncio.create_task(heartbeat(ws))
                 try:

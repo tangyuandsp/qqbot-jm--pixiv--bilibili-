@@ -29,6 +29,13 @@ HELP = """📋 BiliBot 命令帮助
   /persona <人设>     切换人设（仅管理员）
   /openvoice|/offvoice  语音回复开关（仅管理员）
 
+⏰ 定时提醒
+  在群里 @我 或私聊我：记得明天上午9点提醒我开会
+  → 自动创建提醒，到点前5分钟我会喊你（缺时间/事项我会追问）
+  /remind list   查看提醒
+  /remind del <id>  取消提醒
+  /remind clear  清空当前会话提醒
+
 💗 好感度
   /aff              查看当前人设下自己的好感度
   /aff rank         群聊好感度排行

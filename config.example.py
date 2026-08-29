@@ -12,22 +12,14 @@ TEMP_DIR = "/opt/bilibot/temp_videos"
 MAX_FILE_SIZE = 100 * 1024 * 1024
 
 # 群白名单：只处理这些群的 B站链接
-<<<<<<< HEAD
-ALLOWED_GROUPS = [111111111]  # 在这里填白名单群号  # 汪汪队登duan郎 + 第二群
-=======
-ALLOWED_GROUPS = []  # 汪汪队登duan郎 + 第二群
->>>>>>> 54d185a (feat: AI绘图多引擎(Seedream/千问/智谱/涩涩/本地SD) + 审核误拦处理 + 洛琪希日文化)
+ALLOWED_GROUPS = [111111111]  # 汪汪队登duan郎 + 第二群
 
 # ── Pixiv 功能 ──
 # Pixiv refresh_token（从浏览器 Cookie 或 OAuth 获取）
 # 获取方式: https://github.com/upbit/pixivpy/issues/158
 PIXIV_REFRESH_TOKEN = "your_pixiv_refresh_token"
 # QQ 号白名单：只有这些 QQ 号的 /jm 命令才会生效
-<<<<<<< HEAD
-COMIC_ALLOWED_USERS = [10001, 10002]  # 私聊白名单 QQ  # 你的大号 + 机器人号
-=======
-COMIC_ALLOWED_USERS = []  # 你的大号 + 机器人号
->>>>>>> 54d185a (feat: AI绘图多引擎(Seedream/千问/智谱/涩涩/本地SD) + 审核误拦处理 + 洛琪希日文化)
+COMIC_ALLOWED_USERS = [10001, 10002]  # 你的大号 + 机器人号
 
 # 漫画下载临时目录（服务器上）
 COMIC_TEMP_DIR = "/opt/bilibot/temp_videos/comic"
@@ -57,8 +49,6 @@ ZHIPU_API_KEY = "your_zhipu_api_key"
 # 图片理解模型：免费稳定用 glm-4v-flash；glm-4.6v-flash 免费但高峰限流严重
 ZHIPU_VISION_MODEL = "glm-4v-flash"
 
-<<<<<<< HEAD
-=======
 # ── AI 绘图（智谱 cogview：提示词含「智谱」时走此模块）──
 # 获取 key: https://open.bigmodel.cn/
 ZHIPU_DRAW_API_KEY = "your_zhipu_draw_api_key"
@@ -66,7 +56,6 @@ ZHIPU_DRAW_MODEL = "cogview-4"
 ZHIPU_DRAW_API_URL = "https://open.bigmodel.cn/api/paas/v4/images/generations"
 ZHIPU_DRAW_TEMP_DIR = "/opt/bilibot/temp_videos/zhipu"
 
->>>>>>> 54d185a (feat: AI绘图多引擎(Seedream/千问/智谱/涩涩/本地SD) + 审核误拦处理 + 洛琪希日文化)
 # ── AI 绘图（火山方舟 Seedream 文生图 / 图生图）──
 # 获取 key: https://console.volcengine.com/ark/region:cn-beijing/apiKey
 ARK_API_KEY = "your_ark_api_key"
@@ -84,24 +73,13 @@ DRAW_TEMP_DIR = "/opt/bilibot/temp_videos/draw"
 
 # ── AI 绘图（千问 qwen-image：提示词含「千问」时走此模块）──
 # 获取 key: https://dashscope.console.aliyun.com/
-<<<<<<< HEAD
-QWEN_API_KEY = "your_dashscope_api_key"
-QWEN_MODEL = "qwen-image-3.0-pro"
-QWEN_API_URL = "https://dashscope.aliyuncs.com/api/v1/services/aigc/multimodal-generation/generation"
-QWEN_TEMP_DIR = "/opt/bilibot/temp_videos/qwen"
-
-# ── AI 绘图（本地 Stable Diffusion：提示词含「本地」时使用）──
-LOCAL_SD_URL = "http://127.0.0.1:17860"
-LOCAL_SD_CHECKPOINT = "hassakuHentaiModel_hassakuv1m.safetensors"
-LOCAL_DRAW_TEMP_DIR = "/opt/bilibot/temp_videos/local_draw"
-=======
 QWEN_API_KEY = "your_qwen_api_key"
 QWEN_MODEL = "qwen-image-3.0-pro"
 QWEN_API_URL = "https://dashscope.aliyuncs.com/api/v1/services/aigc/multimodal-generation/generation"
 QWEN_TEMP_DIR = "/opt/bilibot/temp_videos/qwen"
 # ── 涩涩绘图（魔搭 API-Inference 托管 Qwen-Image-Edit，无审核通道）──
 # 获取 token: https://modelscope.cn/my/myaccesstoken（实名认证后每日免费额度）
-MODEL_SCOPE_TOKEN = "your_modelscope_token"
+MODEL_SCOPE_TOKEN = "your_model_scope_token"
 SE_MODEL = "Qwen/Qwen-Image-Edit"
 SE_TEMP_DIR = "/opt/bilibot/temp_videos/se"
 
@@ -113,7 +91,6 @@ LOCAL_SD_URL = "http://127.0.0.1:17860"
 LOCAL_SD_CHECKPOINT = "Counterfeit-V3.0_fp16.safetensors"
 LOCAL_DRAW_TEMP_DIR = "/opt/bilibot/temp_videos/local_draw"
 LOCAL_SD_MAX_SIDE = 768  # 出图边长（6GB 显存建议 768；显存够可调大到 896/1024，越清晰越慢）
->>>>>>> 54d185a (feat: AI绘图多引擎(Seedream/千问/智谱/涩涩/本地SD) + 审核误拦处理 + 洛琪希日文化)
 
 # ── 语音功能（GPT-SoVITS 多音色，经反向隧道连接本机）──
 # 本地电脑运行 voice/voice_daemon.py，隧道把服务器 9881 转发到本机 9880
@@ -253,11 +230,7 @@ VOICE_SAY_DIR = "/opt/bilibot/temp_videos/say"
 VOICE_MAX_CHARS = 80
 
 # /sayto 指定发送语音的管理员白名单（只有这些 QQ 能用）
-<<<<<<< HEAD
-VOICE_CONTROL_USERS = [10001, 10002]  # 语音管理员 QQ
-=======
-VOICE_CONTROL_USERS = []
->>>>>>> 54d185a (feat: AI绘图多引擎(Seedream/千问/智谱/涩涩/本地SD) + 审核误拦处理 + 洛琪希日文化)
+VOICE_CONTROL_USERS = [10001, 10002]
 
 # 日志
 LOG_FORMAT = "%(asctime)s [%(levelname)s] %(name)s: %(message)s"
@@ -279,6 +252,7 @@ FEATURES = {
     "ai": True,
     "vision": True,
     "draw": True,
+    "remind": True,
 }
 
 
