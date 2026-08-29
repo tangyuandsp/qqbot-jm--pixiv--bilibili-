@@ -21,7 +21,7 @@ from ai_personas import PERSONAS
 logger = logging.getLogger("Reminder")
 
 REMINDS_FILE = "/opt/bilibot/reminders.json"
-PENDING_TTL = datetime.timedelta(hours=24)
+PENDING_TTL = datetime.timedelta(minutes=5)  # 提醒草稿超时：5 分钟没补全自动放弃，恢复正常聊天
 LEAD_MINUTES = 5  # 提前 5 分钟提醒
 
 # 提醒触发关键词（预判用；真正判定交给 DeepSeek）
