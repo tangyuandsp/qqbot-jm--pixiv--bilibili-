@@ -1,12 +1,14 @@
 # ============================================================
-# QQ 群聊 B站视频下载机器人 — 依赖列表
+# QQ 群聊机器人 — 依赖列表（2026-08-30 按服务器实际 import 收敛）
 # ============================================================
-# 安装方式: pip install -r requirements.txt
+# 安装方式: pip3 install --break-system-packages -r requirements.txt \
+#     fastapi uvicorn pillow
 #
-# 额外系统依赖:
-#   ffmpeg — yt-dlp 合并 DASH 音视频流时需要
-#   Windows:  choco install ffmpeg  或从 https://ffmpeg.org 下载
-#   Linux:    apt install ffmpeg / yum install ffmpeg
+# 说明:
+#   - 主程序只用: websockets / requests / jmcomic / img2pdf / Pillow
+#   - 管理面板额外需要: fastapi / uvicorn
+#   - B站下载走 API 直连（requests 流式），不再需要 yt-dlp/ffmpeg
+#   - Pixiv 走 curl + socks5 代理，不需要 pixivpy3
 # ============================================================
 
 # ── WebSocket 客户端（连接 NapCatQQ）──
@@ -18,3 +20,6 @@ requests>=2.31.0
 # ── 漫画下载 ──
 jmcomic>=2.7.0
 img2pdf>=0.5.0
+
+# ── 图片处理（PIL，图片理解/绘图缩放）──
+Pillow>=10.0.0

@@ -191,23 +191,56 @@ def build_confirm(persona: str, p: dict, time_text: str) -> str:
     return f"好嘞~ {time_s} 我会记得提醒你「{event}」的，安心~"
 
 
+def _clock_text(dt: datetime.datetime) -> str:
+    """把时刻转成自然说法：上午10点 / 下午3点30"""
+    h, m = dt.hour, dt.minute
+    if 5 <= h < 12:
+        part = "上午"
+    elif 12 <= h < 14:
+        part = "中午"
+    elif 14 <= h < 18:
+        part = "下午"
+    elif 18 <= h < 23:
+        part = "晚上"
+    else:
+        part = "凌晨"
+    hh = h % 12 or 12
+    return f"{part}{hh}点" + (f"{m:02d}" if m else "")
+
+
+def _relative_time_text(due: datetime.datetime, now: datetime.datetime) -> str:
+    """把到期时间换算成相对当前的自然说法：今天/明天/昨天/X月X日 + 时段"""
+    today = now.date()
+    due_date = due.date()
+    clock = _clock_text(due)
+    if due_date == today:
+        return f"今天{clock}"
+    if due_date == today + datetime.timedelta(days=1):
+        return f"明天{clock}"
+    if due_date == today - datetime.timedelta(days=1):
+        return f"昨天{clock}"
+    return f"{due.month}月{due.day}日{clock}"
+
+
 def build_notice(persona: str, event: str, due_text: str, stage: str) -> str:
     """到点前 5 分钟（pre）/ 到点（due）的提醒文案"""
     if stage == "pre":
         line = _gen_line(
             f"你是{persona}，俏皮自然、像真人，1~2句，不用Markdown。"
             f"用户设定的提醒「{event}」还有5分钟（{due_text}）就到了。请用{persona}的口吻催一句，轻松可爱。"
+            f"提醒里要自然带上时间描述「{due_text}」（例如：今天上午9点55啦，5分钟后要「{event}」哦）。"
         )
         if line:
             return line
-        return f"⏰ 还有5分钟就要「{event}」啦，准备一下~"
+        return f"⏰ 还有5分钟（{due_text}）就要「{event}」啦，准备一下~"
     line = _gen_line(
         f"你是{persona}，俏皮自然、像真人，1~2句，不用Markdown。"
         f"用户设定的提醒「{event}」到点了（{due_text}）。请用{persona}的口吻提醒TA现在该去做了。"
+        f"提醒里要自然带上时间描述「{due_text}」（例如：今天下午3点啦，该去「{event}」咯）。"
     )
     if line:
         return line
-    return f"⏰ 到点啦！该去「{event}」了！"
+    return f"⏰ 到点啦（{due_text}）！该去「{event}」了！"
 
 
 # ────────────────────────── 意图识别 / 处理入口 ──────────────────────────
@@ -368,9 +401,10 @@ async def _tick():
         notify = datetime.datetime.strptime(notify_s, "%Y-%m-%d %H:%M") if notify_s else None
         persona = t.get("persona") or ai_handler.get_current_persona() or "爱莉希雅"
         event = t.get("event", "")
-        due_text = t.get("time_text") or due_s
         if due is None:
             continue
+        # 到点提醒按“当前时间”动态换算相对说法（创建时存的 time_text 跨天后会过期）
+        due_text = _relative_time_text(due, now)
         # 提前 5 分钟
         if notify is not None and not t.get("pre_sent") and now >= notify:
             text = build_notice(persona, event, due_text, "pre")
