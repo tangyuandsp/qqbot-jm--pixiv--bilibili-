@@ -24,11 +24,23 @@ REMINDS_FILE = "/opt/bilibot/reminders.json"
 PENDING_TTL = datetime.timedelta(minutes=5)  # 提醒草稿超时：5 分钟没补全自动放弃，恢复正常聊天
 LEAD_MINUTES = 5  # 提前 5 分钟提醒
 
+# 到点后未确认的“俏皮轰炸”参数
+BOMB_INTERVAL_SEC = 60     # 每隔 60 秒催一次
+BOMB_MAX_COUNT = 10        # 最多催 10 次
+BOMB_MAX_MINUTES = 30      # 超过 30 分钟自动放弃
+
 # 提醒触发关键词（预判用；真正判定交给 DeepSeek）
 _HINT_KEYWORDS = ("提醒", "别忘了", "别忘", "定时", "到点", "喊我", "叫我", "催我")
 
+# 纯确认词（群聊/私聊回应提醒）：命中则俏皮收尾并消费消息
+_ACK_RE = re.compile(
+    r"^(好的?|好哒|好嘞|好滴|嗯|嗯嗯|嗯呢|嗯嗯嗯|ok|okk|okay|收到|收到啦|知道了|知道啦|"
+    r"晓得|晓得了|行|行吧|没问题|可以|👌)[!！~～。.、\s]*$"
+)
+
 _lock = threading.Lock()
 _ws = {"ws": None}
+_sender = {"fn": None}  # 由 main.py 注入 async fn(ws, task, text) -> message_id
 
 
 # ────────────────────────── 持久化 ──────────────────────────
@@ -243,6 +255,38 @@ def build_notice(persona: str, event: str, due_text: str, stage: str) -> str:
     return f"⏰ 到点啦（{due_text}）！该去「{event}」了！"
 
 
+_BOMB_TEMPLATES = [
+    "喂喂~ 刚刚说的「{event}」别忘了哦，我可都记着呢",
+    "哼哼，装没看到是吧？{due_text}的「{event}」它还在等你呢",
+    "……你是不是把我屏蔽了？那我再喊一声：{event}！",
+    "好啦不逗你了，但这个真的要紧，看到了回我一声嘛",
+]
+
+
+def build_bomb(persona: str, event: str, due_text: str, count: int) -> str:
+    """到点后用户没回应的俏皮轰炸文案（次数越多越缠人）"""
+    line = _gen_line(
+        f"你是{persona}，俏皮自然、像真人，1~2句，不用Markdown。"
+        f"你提醒过用户「{event}」（{due_text}），但用户一直没回应，这已经是第{count + 1}次催了。"
+        f"请用{persona}的口吻越来越俏皮地再催一次，可以假装委屈、撒娇、或耍赖，但别真生气，可爱一点。"
+    )
+    if line:
+        return line
+    idx = min(count, len(_BOMB_TEMPLATES) - 1)
+    return _BOMB_TEMPLATES[idx].format(event=event, due_text=due_text)
+
+
+def build_ack(persona: str, event: str) -> str:
+    """用户终于回应的俏皮收尾"""
+    line = _gen_line(
+        f"你是{persona}，俏皮自然、像真人，1句，不用Markdown。"
+        f"用户终于回应了你催的「{event}」，请用{persona}的口吻轻松地确认收到，语气俏皮（比如：收到收到~ 这就放过你、好耶、这还差不多）。"
+    )
+    if line:
+        return line
+    return "收到收到！这就放过你~"
+
+
 # ────────────────────────── 意图识别 / 处理入口 ──────────────────────────
 
 def contains_hint(text: str) -> bool:
@@ -318,12 +362,87 @@ async def handle_text(ws, text: str, channel: str, target_id, user_id, reply_fn)
         "persona": persona,
         "pre_sent": False,
         "due_sent": False,
+        "confirmed": False,
+        "bomb_count": 0,
+        "last_bomb_at": None,
+        "remind_msg_id": None,
         "created_at": now.isoformat(),
     }
     add_task(task)
     await reply_fn(build_confirm(persona, p, p.get("time_text") or p["time"]))
     logger.info(f"⏰ 已创建提醒: {channel}/{target_id} {p['event']} @ {p['time']}")
     return True
+
+
+async def try_confirm_group(ws, event: dict, reply_fn) -> str:
+    """群聊确认：用户回复提醒消息或@机器人 = 已确认。
+
+    返回 'consumed'（纯确认词，已俏皮收尾，消息消费掉）/ 'confirmed'（已确认但消息还要继续处理）/ ''（无待确认提醒）
+    """
+    group_id = event.get("group_id")
+    user_id = event.get("user_id")
+    raw_message = event.get("raw_message", "")
+    if not user_id or not raw_message:
+        return ""
+    # 是否回复了某条消息（CQ:reply）
+    reply_id = None
+    m = re.search(r"\[CQ:reply,id=(\d+)\]", raw_message)
+    if m:
+        reply_id = int(m.group(1))
+    # 是否 @机器人
+    self_id = str(event.get("self_id", ""))
+    at_me = False
+    for seg in event.get("message", []):
+        if seg.get("type") == "at":
+            qq = str(seg.get("data", {}).get("qq", ""))
+            if qq == self_id or qq == "all":
+                at_me = True
+    tasks = load_tasks()
+    hit = None
+    for t in tasks:
+        if (t.get("channel") == "group" and t.get("target_id") == group_id
+                and t.get("user_id") == user_id
+                and t.get("due_sent") and not t.get("confirmed")):
+            # 回复了提醒消息 或 @机器人，二者其一即确认
+            if (reply_id and reply_id == t.get("remind_msg_id")) or at_me:
+                hit = t
+                break
+    if hit is None:
+        return ""
+    hit["confirmed"] = True
+    save_tasks(tasks)
+    clean = re.sub(r"\[CQ:[^\]]*\]", "", raw_message).strip()
+    if _is_ack(clean):
+        persona = hit.get("persona") or ai_handler.get_current_persona() or "爱莉希雅"
+        await reply_fn(build_ack(persona, hit.get("event", "")))
+        return "consumed"
+    return "confirmed"
+
+
+async def try_confirm_private(ws, event: dict, reply_fn) -> str:
+    """私聊确认：用户发任意消息 = 已确认（一对一，无需 @/回复）"""
+    user_id = event.get("user_id")
+    raw_message = event.get("raw_message", "")
+    if not user_id or not raw_message:
+        return ""
+    tasks = load_tasks()
+    hit = None
+    for t in tasks:
+        if (t.get("channel") == "private" and t.get("target_id") == user_id
+                and t.get("user_id") == user_id
+                and t.get("due_sent") and not t.get("confirmed")):
+            hit = t
+            break
+    if hit is None:
+        return ""
+    hit["confirmed"] = True
+    save_tasks(tasks)
+    clean = re.sub(r"\[CQ:[^\]]*\]", "", raw_message).strip()
+    if _is_ack(clean):
+        persona = hit.get("persona") or ai_handler.get_current_persona() or "爱莉希雅"
+        await reply_fn(build_ack(persona, hit.get("event", "")))
+        return "consumed"
+    return "confirmed"
 
 
 async def handle_command(ws, text: str, channel: str, target_id, user_id, reply_fn) -> bool:
@@ -408,22 +527,58 @@ async def _tick():
         # 提前 5 分钟
         if notify is not None and not t.get("pre_sent") and now >= notify:
             text = build_notice(persona, event, due_text, "pre")
-            await _send(ws, t, text)
+            mid = await _send(ws, t, text)
             t["pre_sent"] = True
+            if mid and t.get("channel") == "group":
+                t["remind_msg_id"] = mid
             changed = True
             logger.info(f"⏰ 提前提醒: {event} @ {due_text}")
         # 到点
         if not t.get("due_sent") and now >= due:
             text = build_notice(persona, event, due_text, "due")
-            await _send(ws, t, text)
+            mid = await _send(ws, t, text)
             t["due_sent"] = True
+            t.setdefault("last_bomb_at", now.strftime("%Y-%m-%d %H:%M:%S"))
+            t.setdefault("confirmed", False)
+            t.setdefault("bomb_count", 0)
+            if mid and t.get("channel") == "group":
+                t["remind_msg_id"] = mid
             changed = True
             logger.info(f"⏰ 到点提醒: {event} @ {due_text}")
+        # 俏皮轰炸：到点已发且未确认，每隔 BOMB_INTERVAL_SEC 催一次
+        if t.get("due_sent") and not t.get("confirmed"):
+            if t.get("bomb_count", 0) >= BOMB_MAX_COUNT or                (now - due) > datetime.timedelta(minutes=BOMB_MAX_MINUTES):
+                t["confirmed"] = True  # 自动放弃，停止轰炸
+                changed = True
+                continue
+            last_s = t.get("last_bomb_at")
+            try:
+                last_dt = datetime.datetime.strptime(last_s, "%Y-%m-%d %H:%M:%S") if last_s else due
+            except Exception:
+                last_dt = due
+            if (now - last_dt).total_seconds() >= BOMB_INTERVAL_SEC:
+                text = build_bomb(persona, event, due_text, t.get("bomb_count", 0))
+                mid = await _send(ws, t, text)
+                t["bomb_count"] = t.get("bomb_count", 0) + 1
+                t["last_bomb_at"] = now.strftime("%Y-%m-%d %H:%M:%S")
+                if mid and t.get("channel") == "group":
+                    t["remind_msg_id"] = mid
+                changed = True
+                logger.info(f"⏰ 轰炸#{t['bomb_count']}: {event} @ {due_text}")
     if changed:
         save_tasks(tasks)
 
 
-async def _send(ws, task: dict, text: str) -> None:
+async def _send(ws, task: dict, text: str) -> int | None:
+    """发送提醒；返回 message_id（群聊用于匹配用户回复），失败/无注入返回 None"""
+    fn = _sender.get("fn")
+    if fn is not None:
+        try:
+            return await fn(ws, task, text)
+        except Exception as exc:
+            logger.warning(f"⏰ 提醒发送异常: {exc}")
+            return None
+    # 兜底直发（无 message_id）
     if task.get("channel") == "group":
         await ws.send(json.dumps({
             "action": "send_group_msg",
@@ -437,7 +592,18 @@ async def _send(ws, task: dict, text: str) -> None:
             "action": "send_private_msg",
             "params": {"user_id": task["target_id"], "message": text},
         }))
+    return None
 
 
 def set_ws(ws) -> None:
     _ws["ws"] = ws
+
+
+def set_sender(fn) -> None:
+    """注入发送函数（main.py 提供，返回 message_id 用于群聊回复匹配）"""
+    _sender["fn"] = fn
+
+
+def _is_ack(text: str) -> bool:
+    t = (text or "").strip().strip("~～。.!！ ")
+    return bool(_ACK_RE.match(t))

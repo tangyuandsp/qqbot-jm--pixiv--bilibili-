@@ -92,6 +92,26 @@ async def call_onebot_api(ws, action: str, params: dict, timeout: float = 8.0):
         _pending_api.pop(echo, None)
 
 
+async def _reminder_send(ws, task: dict, text: str) -> int | None:
+    """提醒发送（注入给 reminder）：返回 message_id，群聊用于匹配用户回复"""
+    try:
+        if task.get("channel") == "group":
+            resp = await call_onebot_api(ws, "send_group_msg", {
+                "group_id": task["target_id"],
+                "message": f"[CQ:at,qq={task['user_id']}] {text}",
+            })
+        else:
+            resp = await call_onebot_api(ws, "send_private_msg", {
+                "user_id": task["target_id"],
+                "message": text,
+            })
+        data = (resp or {}).get("data") or {}
+        return data.get("message_id")
+    except Exception as exc:
+        logger.warning(f"⏰ 提醒发送失败: {exc}")
+        return None
+
+
 async def _find_reply_image(ws, reply_id: int) -> str | None:
     """找引用消息里的图片 URL：先查缓存；没命中则调 get_msg 补查并回填缓存。"""
     if reply_id:
@@ -995,6 +1015,13 @@ async def handle_group_message(ws, event: dict) -> None:
             asyncio.create_task(handle_comic_command(ws, group_id, user_id, sub_cmd))
         return
 
+    # ── 提醒确认：用户回复提醒消息/@机器人 = 已收到（停止轰炸） ──
+    if feature_enabled("remind"):
+        r = await reminder.try_confirm_group(ws, event,
+                                             lambda m: send_group_message(ws, group_id, m))
+        if r == "consumed":
+            return
+
     # ── 提醒功能：@机器人 + 提醒意图（独立于 AI 开关/人设） ──
     if feature_enabled("remind"):
         self_id = event.get("self_id")
@@ -1115,6 +1142,13 @@ async def handle_private_message(ws, event: dict) -> None:
 
     if user_id not in config.COMIC_ALLOWED_USERS:
         return
+
+    # ── 提醒确认：私聊用户任意消息 = 已收到（停止轰炸） ──
+    if feature_enabled("remind"):
+        r = await reminder.try_confirm_private(ws, event,
+                                               lambda m: send_private_message(ws, user_id, m))
+        if r == "consumed":
+            return
 
     # 缓存私聊里的图片，供后续「引用图片提问」使用
     _record_images(event)
@@ -1662,6 +1696,7 @@ async def listen():
             async with websockets.connect(NAPCAT_WS_URL, ping_interval=20, ping_timeout=10, max_size=2**23) as ws:
                 _current_ws["ws"] = ws
                 reminder.set_ws(ws)
+                reminder.set_sender(_reminder_send)
                 logger.info("✅ 已连接到 NapCatQQ，开始监听群消息...")
                 hb_task = asyncio.create_task(heartbeat(ws))
                 try:
