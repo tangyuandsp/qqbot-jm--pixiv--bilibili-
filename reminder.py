@@ -22,7 +22,8 @@ logger = logging.getLogger("Reminder")
 
 REMINDS_FILE = "/opt/bilibot/reminders.json"
 PENDING_TTL = datetime.timedelta(minutes=5)  # 提醒草稿超时：5 分钟没补全自动放弃，恢复正常聊天
-LEAD_MINUTES = 5  # 提前 5 分钟提醒
+LEAD_MINUTES = 5   # 提前 5 分钟提醒
+EARLY_MINUTES = 30  # 提前 30 分钟提醒
 
 # 到点后未确认的“俏皮轰炸”参数
 BOMB_INTERVAL_SEC = 60     # 每隔 60 秒催一次
@@ -236,6 +237,15 @@ def _relative_time_text(due: datetime.datetime, now: datetime.datetime) -> str:
 
 def build_notice(persona: str, event: str, due_text: str, stage: str) -> str:
     """到点前 5 分钟（pre）/ 到点（due）的提醒文案"""
+    if stage == "early":
+        line = _gen_line(
+            f"你是{persona}，俏皮自然、像真人，1~2句，不用Markdown。"
+            f"用户设定的提醒「{event}」还有半小时（{due_text}）就到了。请用{persona}的口吻提前知会一句，轻松可爱。"
+            f"提醒里要自然带上时间描述「{due_text}」（例如：今天下午3点就快到啦，半小时后要去「{event}」哦）。"
+        )
+        if line:
+            return line
+        return f"⏰ 还有半小时（{due_text}）就要「{event}」啦，先记在心里哦~"
     if stage == "pre":
         line = _gen_line(
             f"你是{persona}，俏皮自然、像真人，1~2句，不用Markdown。"
@@ -349,6 +359,7 @@ async def handle_text(ws, text: str, channel: str, target_id, user_id, reply_fn)
         due = now + datetime.timedelta(minutes=5)
         p["time"] = due.strftime("%Y-%m-%d %H:%M")
     notify_at = due - datetime.timedelta(minutes=LEAD_MINUTES)
+    early_at = due - datetime.timedelta(minutes=EARLY_MINUTES)
     persona = ai_handler.get_current_persona() or "爱莉希雅"
     task = {
         "id": uuid.uuid4().hex[:12],
@@ -358,8 +369,10 @@ async def handle_text(ws, text: str, channel: str, target_id, user_id, reply_fn)
         "event": p["event"],
         "due_at": due.strftime("%Y-%m-%d %H:%M"),
         "notify_at": notify_at.strftime("%Y-%m-%d %H:%M"),
+        "early_at": early_at.strftime("%Y-%m-%d %H:%M"),
         "time_text": p.get("time_text") or p["time"],
         "persona": persona,
+        "early_sent": False,
         "pre_sent": False,
         "due_sent": False,
         "confirmed": False,
@@ -524,6 +537,17 @@ async def _tick():
             continue
         # 到点提醒按“当前时间”动态换算相对说法（创建时存的 time_text 跨天后会过期）
         due_text = _relative_time_text(due, now)
+        # 提前 30 分钟
+        early_s = t.get("early_at", "")
+        early = datetime.datetime.strptime(early_s, "%Y-%m-%d %H:%M") if early_s else None
+        if early is not None and not t.get("early_sent") and now >= early:
+            text = build_notice(persona, event, due_text, "early")
+            mid = await _send(ws, t, text)
+            t["early_sent"] = True
+            if mid and t.get("channel") == "group":
+                t["remind_msg_id"] = mid
+            changed = True
+            logger.info(f"⏰ 提前30分钟提醒: {event} @ {due_text}")
         # 提前 5 分钟
         if notify is not None and not t.get("pre_sent") and now >= notify:
             text = build_notice(persona, event, due_text, "pre")
