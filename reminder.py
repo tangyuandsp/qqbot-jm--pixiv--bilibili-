@@ -371,6 +371,7 @@ async def handle_text(ws, text: str, channel: str, target_id, user_id, reply_fn)
         "notify_at": notify_at.strftime("%Y-%m-%d %H:%M"),
         "early_at": early_at.strftime("%Y-%m-%d %H:%M"),
         "time_text": p.get("time_text") or p["time"],
+        "notice_channel": "private",  # 提醒本体（提前30分钟/5分钟/到点/轰炸）一律私聊发送
         "persona": persona,
         "early_sent": False,
         "pre_sent": False,
@@ -382,7 +383,10 @@ async def handle_text(ws, text: str, channel: str, target_id, user_id, reply_fn)
         "created_at": now.isoformat(),
     }
     add_task(task)
-    await reply_fn(build_confirm(persona, p, p.get("time_text") or p["time"]))
+    confirm = build_confirm(persona, p, p.get("time_text") or p["time"])
+    if channel == "group":
+        confirm += "\n（到点我会私聊提醒你哦，记得通过我的好友申请～）"
+    await reply_fn(confirm)
     logger.info(f"⏰ 已创建提醒: {channel}/{target_id} {p['event']} @ {p['time']}")
     return True
 
@@ -441,8 +445,9 @@ async def try_confirm_private(ws, event: dict, reply_fn) -> str:
     tasks = load_tasks()
     hit = None
     for t in tasks:
-        if (t.get("channel") == "private" and t.get("target_id") == user_id
-                and t.get("user_id") == user_id
+        # 私聊创建，或群聊创建但提醒私发 → 都算私聊可确认
+        private_notice = t.get("notice_channel") == "private" or t.get("channel") == "private"
+        if (private_notice and t.get("user_id") == user_id
                 and t.get("due_sent") and not t.get("confirmed")):
             hit = t
             break
@@ -603,7 +608,13 @@ async def _send(ws, task: dict, text: str) -> int | None:
             logger.warning(f"⏰ 提醒发送异常: {exc}")
             return None
     # 兜底直发（无 message_id）
-    if task.get("channel") == "group":
+    private_notice = task.get("notice_channel") == "private" or task.get("channel") == "private"
+    if private_notice:
+        await ws.send(json.dumps({
+            "action": "send_private_msg",
+            "params": {"user_id": task.get("user_id") or task.get("target_id"), "message": text},
+        }))
+    elif task.get("channel") == "group":
         await ws.send(json.dumps({
             "action": "send_group_msg",
             "params": {

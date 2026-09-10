@@ -93,18 +93,36 @@ async def call_onebot_api(ws, action: str, params: dict, timeout: float = 8.0):
 
 
 async def _reminder_send(ws, task: dict, text: str) -> int | None:
-    """提醒发送（注入给 reminder）：返回 message_id，群聊用于匹配用户回复"""
+    """提醒发送（注入给 reminder）：返回 message_id，群聊用于匹配用户回复。
+
+    notice_channel='private'（新任务默认）→ 私聊发给发起人；
+    私发失败且源自群聊 → 自动回落到群里 @（避免非好友收不到导致丢提醒）。
+    旧任务无 notice_channel → 保持原逻辑（群聊发群、私聊发私）。
+    """
+    private_notice = task.get("notice_channel") == "private" or task.get("channel") == "private"
     try:
-        if task.get("channel") == "group":
-            resp = await call_onebot_api(ws, "send_group_msg", {
-                "group_id": task["target_id"],
-                "message": f"[CQ:at,qq={task['user_id']}] {text}",
-            })
-        else:
+        if private_notice:
             resp = await call_onebot_api(ws, "send_private_msg", {
-                "user_id": task["target_id"],
+                "user_id": task.get("user_id") or task.get("target_id"),
                 "message": text,
             })
+            data = (resp or {}).get("data") or {}
+            if data.get("message_id"):
+                return data.get("message_id")
+            # 私发失败：如果是从群聊创建的，回落到群里 @
+            if task.get("channel") == "group":
+                logger.warning("⏰ 私聊提醒发送失败，回落到群聊 @")
+                resp = await call_onebot_api(ws, "send_group_msg", {
+                    "group_id": task["target_id"],
+                    "message": f"[CQ:at,qq={task['user_id']}] {text}",
+                })
+                data = (resp or {}).get("data") or {}
+                return data.get("message_id")
+            return None
+        resp = await call_onebot_api(ws, "send_group_msg", {
+            "group_id": task["target_id"],
+            "message": f"[CQ:at,qq={task['user_id']}] {text}",
+        })
         data = (resp or {}).get("data") or {}
         return data.get("message_id")
     except Exception as exc:
@@ -1140,15 +1158,19 @@ async def handle_private_message(ws, event: dict) -> None:
 
     logger.info(f"📩 私聊({user_id}): {raw_message[:80]}")
 
-    if user_id not in config.COMIC_ALLOWED_USERS:
-        return
-
     # ── 提醒确认：私聊用户任意消息 = 已收到（停止轰炸） ──
+    # 必须在白名单检查之前：群聊设置的提醒现在私发，群成员可能不在私聊白名单，
+    # 但收到私聊提醒后回任意一句都应能确认（非白名单只允许确认，不响应其它内容）
     if feature_enabled("remind"):
         r = await reminder.try_confirm_private(ws, event,
                                                lambda m: send_private_message(ws, user_id, m))
         if r == "consumed":
             return
+        if r == "confirmed" and user_id not in config.COMIC_ALLOWED_USERS:
+            return  # 非白名单：只确认提醒，不处理其它消息（防绕过白名单）
+
+    if user_id not in config.COMIC_ALLOWED_USERS:
+        return
 
     # 缓存私聊里的图片，供后续「引用图片提问」使用
     _record_images(event)

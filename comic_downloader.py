@@ -45,8 +45,8 @@ download:
     rule: Bdir_Pindex
     base_dir: "{work_dir}"
   threading:
-    image: 6
-    photo: 1
+    image: 8
+    photo: 2
 plugins:
   after_album:
     - plugin: img2pdf
